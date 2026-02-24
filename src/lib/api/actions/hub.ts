@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { actionError, actionSuccess, type ActionResult } from "@/lib/api/action-result";
 import { getActionContext } from "@/lib/api/actions/shared";
@@ -14,7 +15,9 @@ const HUB_MENU_KEYS = [
   "tax_invoices",
   "bank_transactions",
   "vault",
-];
+] as const;
+
+const menuKeySchema = z.enum(HUB_MENU_KEYS);
 
 export async function markAllMenusAsRead(): Promise<ActionResult> {
   try {
@@ -42,8 +45,9 @@ export async function markAllMenusAsRead(): Promise<ActionResult> {
 }
 
 export async function markMenuAsRead(menuKey: string): Promise<ActionResult> {
-  if (!menuKey) {
-    return actionError("메뉴 키가 필요합니다.");
+  const parsed = menuKeySchema.safeParse(menuKey);
+  if (!parsed.success) {
+    return actionError("유효하지 않은 메뉴 키입니다.");
   }
 
   try {
@@ -51,7 +55,7 @@ export async function markMenuAsRead(menuKey: string): Promise<ActionResult> {
     const { error } = await supabase.from("user_menu_reads").upsert(
       {
         user_id: user.id,
-        menu_key: menuKey,
+        menu_key: parsed.data,
         last_read_at: new Date().toISOString(),
       },
       { onConflict: "user_id,menu_key" },
