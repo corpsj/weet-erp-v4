@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { actionError, actionSuccess, type ActionResult } from "@/lib/api/action-result";
-import type { CalendarEventColor, CalendarEventInput } from "@/types/calendar";
+import type { CalendarEventInput } from "@/types/calendar";
 import { getActionContext } from "@/lib/api/actions/shared";
 
 const calendarSchema = z.object({
@@ -13,10 +13,18 @@ const calendarSchema = z.object({
   memo: z.string().max(4000, "메모가 너무 깁니다.").optional(),
 });
 
+const upsertCalendarSchema = calendarSchema.extend({
+  id: z.string().uuid().optional(),
+});
+
+const deleteCalendarSchema = z.object({
+  eventId: z.string().uuid("삭제할 일정을 찾을 수 없습니다."),
+});
+
 type UpsertCalendarEventInput = CalendarEventInput & { id?: string };
 
 export async function upsertCalendarEvent(input: UpsertCalendarEventInput): Promise<ActionResult<{ id: string }>> {
-  const parsed = calendarSchema.safeParse(input);
+  const parsed = upsertCalendarSchema.safeParse(input);
   if (!parsed.success) {
     return actionError(parsed.error.issues[0]?.message ?? "입력값을 확인해주세요.");
   }
@@ -26,15 +34,15 @@ export async function upsertCalendarEvent(input: UpsertCalendarEventInput): Prom
     const payload = {
       title: parsed.data.title,
       event_date: parsed.data.eventDate,
-      color: parsed.data.color as CalendarEventColor,
+      color: parsed.data.color,
       memo: parsed.data.memo?.trim() || null,
     };
 
-    if (input.id) {
+    if (parsed.data.id) {
       const { data, error } = await supabase
         .from("calendar_events")
         .update(payload)
-        .eq("id", input.id)
+        .eq("id", parsed.data.id)
         .select("id")
         .single();
 
@@ -69,13 +77,14 @@ export async function upsertCalendarEvent(input: UpsertCalendarEventInput): Prom
 }
 
 export async function deleteCalendarEvent(eventId: string): Promise<ActionResult> {
-  if (!eventId) {
-    return actionError("삭제할 일정을 찾을 수 없습니다.");
+  const parsed = deleteCalendarSchema.safeParse({ eventId });
+  if (!parsed.success) {
+    return actionError(parsed.error.issues[0]?.message ?? "삭제할 일정을 찾을 수 없습니다.");
   }
 
   try {
     const { supabase } = await getActionContext();
-    const { error } = await supabase.from("calendar_events").delete().eq("id", eventId);
+    const { error } = await supabase.from("calendar_events").delete().eq("id", parsed.data.eventId);
 
     if (error) {
       return actionError("일정 삭제에 실패했습니다.");
