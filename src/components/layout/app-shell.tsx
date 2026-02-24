@@ -28,7 +28,7 @@ export function AppShell({ children, username, role }: AppShellProps) {
           <div className="fixed inset-0 z-40 md:hidden">
             <button
               type="button"
-              className="absolute inset-0 bg-[rgb(10_10_10/72%)]"
+              className="absolute inset-0 bg-[#0a0a0a]/80"
               onClick={() => setMobileMenuOpen(false)}
             />
             <div className="relative h-full w-[84%] max-w-[320px]">

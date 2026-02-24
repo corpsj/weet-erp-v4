@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 
@@ -19,21 +18,23 @@ export function ModuleShell({
   status = "ready",
 }: ModuleShellProps) {
   return (
-    <section className="animate-[fade-up_420ms_ease-out]">
+    <section className="animate-[fade-up_300ms_ease-out] w-full max-w-7xl mx-auto py-6 sm:py-8 px-4 sm:px-6">
       <PageHeader title={title} description={description} breadcrumb={breadcrumb} />
-      <Card className="grid-noise">
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-[var(--color-ink-muted)]">Phase 1 기반 화면</p>
+      <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] shadow-sm">
+        <div className="flex items-center justify-between border-b border-[#2a2a2a] px-6 py-4 bg-[#1a1a1a] rounded-t-xl">
+          <p className="text-xs font-medium tracking-wide text-[#9a9a9a] uppercase">Phase 1 기반 화면</p>
           <Badge tone={status === "soon" ? "warning" : "brand"}>
             {status === "soon" ? "출시 예정" : "기반 완료"}
           </Badge>
         </div>
-        {children ?? (
-          <p className="text-sm leading-relaxed text-[var(--color-ink-muted)]">
-            이 모듈은 화면 골격, 네비게이션, 인증 및 데이터 접근 패턴이 연결되어 있습니다.
-          </p>
-        )}
-      </Card>
+        <div className="p-6">
+          {children ?? (
+            <p className="text-sm leading-relaxed text-[#9a9a9a]">
+              이 모듈은 화면 골격, 네비게이션, 인증 및 데이터 접근 패턴이 연결되어 있습니다.
+            </p>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

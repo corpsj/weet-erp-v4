@@ -3,25 +3,25 @@ import { cn } from "@/lib/utils/cn";
 
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-[rgb(42_42_42/50%)]">
+    <div className="overflow-x-auto rounded-md border border-[#2a2a2a] bg-[#0a0a0a]">
       <table className={cn("min-w-full border-collapse", className)} {...props} />
     </div>
   );
 }
 
 export function THead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn("bg-[rgb(20_20_20/90%)]", className)} {...props} />;
+  return <thead className={cn("bg-[#1a1a1a] border-b border-[#2a2a2a]", className)} {...props} />;
 }
 
 export function TBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={cn("bg-[rgb(20_20_20/70%)]", className)} {...props} />;
+  return <tbody className={cn("bg-[#0a0a0a]", className)} {...props} />;
 }
 
 export function TH({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
       className={cn(
-        "h-11 border-b border-[rgb(42_42_42/50%)] px-4 text-left text-xs font-semibold text-[var(--color-ink-muted)]",
+        "h-10 px-4 text-left text-xs font-medium text-[#9a9a9a]",
         className,
       )}
       {...props}
@@ -33,7 +33,7 @@ export function TD({ className, ...props }: TdHTMLAttributes<HTMLTableCellElemen
   return (
     <td
       className={cn(
-        "h-11 border-b border-[rgb(42_42_42/45%)] px-4 text-sm text-[var(--color-ink)]",
+        "h-11 border-b border-[#2a2a2a] px-4 text-sm text-[#ffffff]",
         className,
       )}
       {...props}
@@ -42,5 +42,15 @@ export function TD({ className, ...props }: TdHTMLAttributes<HTMLTableCellElemen
 }
 
 export function TR({ className, ...props }: PropsWithChildren<HTMLAttributes<HTMLTableRowElement>>) {
-  return <tr className={cn("hover:bg-[rgb(26_26_26/48%)]", className)} {...props} />;
+  return <tr className={cn("transition-colors hover:bg-[#1a1a1a]", className)} {...props} />;
+}
+
+export function TableEmpty({ colSpan = 1, className }: { colSpan?: number; className?: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className={cn("h-32 text-center text-sm text-[#9a9a9a]", className)}>
+        데이터 없음
+      </td>
+    </tr>
+  );
 }
