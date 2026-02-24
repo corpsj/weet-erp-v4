@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CheckCircle2, Eye, LoaderCircle, Plus, SquarePen, Trash2 } from "lucide-react";
+import { Bot, CheckCircle2, Eye, LoaderCircle, Plus, SquarePen, Trash2, UploadCloud, FileText, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -17,12 +17,6 @@ import {
 import { markMenuAsRead } from "@/lib/api/actions/hub";
 import { useUtilityBills } from "@/lib/api/hooks";
 import { formatCurrency } from "@/lib/utils/format";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { UTILITY_CATEGORIES, type UtilityBill, type UtilityCategory, type UtilityProcessingStatus } from "@/types/utility";
 
 type UtilityCategoryFilter = "all" | UtilityCategory;
@@ -54,6 +48,25 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("이미지 변환 실패"));
     reader.readAsDataURL(file);
   });
+}
+
+function GrokModal({ open, onClose, title, children }: { open: boolean, onClose: () => void, title: string, children: React.ReactNode }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a0a]/90 backdrop-blur-none p-4 overflow-y-auto">
+      <div className="bg-[#141414] border border-[#3a3a3a] w-full max-w-lg shadow-none flex flex-col my-auto">
+        <div className="flex justify-between items-center p-4 border-b border-[#2a2a2a]">
+          <h2 className="text-[#ffffff] font-bold tracking-widest uppercase text-sm">{title}</h2>
+          <button onClick={onClose} className="text-[#9a9a9a] hover:text-[#ffffff] transition-colors">
+             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function UtilitiesWorkspace() {
@@ -137,6 +150,13 @@ export function UtilitiesWorkspace() {
     };
   }, [bills]);
 
+  const thisMonthPaidAmount = useMemo(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    return (bills ?? [])
+      .filter(b => b.is_paid && b.billing_month === currentMonth)
+      .reduce((sum, b) => sum + b.amount, 0);
+  }, [bills]);
+
   const refreshQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["utility-bills"] }),
@@ -217,7 +237,9 @@ export function UtilitiesWorkspace() {
 
     let imagePath = editor.image_path;
     if (billImageFile) {
-      const uploadResult = await uploadUtilityBillImage(billImageFile);
+      const formData = new FormData();
+      formData.append("file", billImageFile);
+      const uploadResult = await uploadUtilityBillImage(formData);
       if (!uploadResult.ok) {
         toast.error(uploadResult.message);
         return;
@@ -289,252 +311,257 @@ export function UtilitiesWorkspace() {
 
   if (isLoading) {
     return (
-      <div className="mt-4 space-y-4">
-        <Card className="h-24 animate-pulse" />
-        <Card className="h-96 animate-pulse" />
+      <div className="bg-[#0a0a0a] min-h-screen p-6 flex flex-col gap-4">
+        <div className="h-24 bg-[#141414] border border-[#2a2a2a] animate-pulse" />
+        <div className="h-96 bg-[#141414] border border-[#2a2a2a] animate-pulse" />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <Card className="mt-4 p-6">
-        <p className="text-sm text-[var(--color-danger)]">공과금 데이터를 불러오지 못했습니다.</p>
-        <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
-          다시 시도
-        </Button>
-      </Card>
+      <div className="bg-[#0a0a0a] min-h-screen p-6">
+        <div className="bg-[#141414] border border-[#ff4d6d] p-6 text-center">
+          <p className="text-[#ff4d6d] font-mono text-sm uppercase tracking-wider mb-4">Failed to load utility records.</p>
+          <button className="bg-[#1a1a1a] border border-[#3a3a3a] text-[#ffffff] px-6 py-2 text-sm uppercase tracking-wider hover:bg-[#2a2a2a] transition-colors" onClick={() => void refetch()}>
+            Retry
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="mt-4 space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-ink-muted)]">미납 건수</p>
-          <p className="display-font mt-1 text-3xl">{summary.count}건</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-ink-muted)]">미납 총액</p>
-          <p className="display-font mt-1 text-3xl text-[var(--color-warning)]">{formatCurrency(summary.amount)}</p>
-        </Card>
+    <div className="bg-[#0a0a0a] min-h-screen text-[#ffffff] p-6 font-mono selection:bg-[#ffffff] selection:text-[#0a0a0a]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#2a2a2a]">
+        <h1 className="text-xl font-bold tracking-widest uppercase">Utility Operations</h1>
+        <button 
+          className="bg-[#ffffff] text-[#0a0a0a] px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-[#e5e5e5] transition-colors uppercase tracking-wider" 
+          onClick={openCreate}
+        >
+          <Plus className="w-4 h-4" /> New Record
+        </button>
       </div>
 
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(10_19_31/75%)] p-1">
-            {["all", ...UTILITY_CATEGORIES].map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setCategoryFilter(category as UtilityCategoryFilter)}
-                className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                  categoryFilter === category ? "bg-[rgb(35_63_94/85%)] text-[var(--color-brand)]" : "text-[var(--color-ink-muted)]"
-                }`}
-              >
-                {category === "all" ? "전체" : category}
-              </button>
+      {/* Monthly Trend Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-[#141414] border border-[#2a2a2a] p-5 flex flex-col">
+          <span className="text-[#9a9a9a] text-xs uppercase tracking-widest mb-3">Total Unpaid</span>
+          <span className="text-[#ff4d6d] text-3xl font-bold">{summary.count} Bills</span>
+          <span className="text-[#ff4d6d] text-sm mt-2">{formatCurrency(summary.amount)} KRW</span>
+        </div>
+        <div className="bg-[#141414] border border-[#2a2a2a] p-5 flex flex-col">
+          <span className="text-[#9a9a9a] text-xs uppercase tracking-widest mb-3">Paid This Month</span>
+          <span className="text-[#ffffff] text-3xl font-bold">{formatCurrency(thisMonthPaidAmount)}</span>
+          <span className="text-[#9a9a9a] text-sm mt-2">KRW</span>
+        </div>
+        <div className="bg-[#141414] border border-[#2a2a2a] p-5 flex flex-col justify-center">
+          <span className="text-[#9a9a9a] text-xs uppercase tracking-widest mb-3">Category Filter</span>
+          <div className="flex gap-2 flex-wrap">
+            {["all", ...UTILITY_CATEGORIES].map(cat => (
+               <button 
+                 key={cat}
+                 onClick={() => setCategoryFilter(cat as UtilityCategoryFilter)}
+                 className={`px-3 py-1 text-xs uppercase tracking-wider border transition-colors ${categoryFilter === cat ? 'bg-[#ffffff] text-[#0a0a0a] border-[#ffffff]' : 'bg-[#1a1a1a] text-[#b0b0b0] border-[#2a2a2a] hover:bg-[#2a2a2a] hover:text-[#ffffff]'}`}
+               >
+                 {cat === "all" ? "ALL" : cat}
+               </button>
             ))}
           </div>
-          <Button onClick={openCreate}>
-            <Plus className="mr-1 h-4 w-4" /> 공과금 등록
-          </Button>
         </div>
+      </div>
 
-        <div className="mt-4 hidden lg:block">
-          <Table>
-            <THead>
-              <TR>
-                <TH>분류</TH>
-                <TH>청구월</TH>
-                <TH className="text-right">금액</TH>
-                <TH>상태</TH>
-                <TH>이미지</TH>
-                <TH>메모 (1초 자동 저장)</TH>
-                <TH className="w-[130px] text-right">작업</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {filteredBills.map((bill) => (
-                <TR key={bill.id}>
-                  <TD>{bill.category}</TD>
-                  <TD>{bill.billing_month}</TD>
-                  <TD className="text-right">{formatCurrency(bill.amount)}</TD>
-                  <TD>
-                    <button type="button" onClick={() => void handleTogglePaid(bill)}>
-                      <Badge tone={bill.is_paid ? "brand" : "warning"}>{bill.is_paid ? "납부 완료" : "미납"}</Badge>
-                    </button>
-                  </TD>
-                  <TD>
-                    {bill.image_path ? (
-                      <Button variant="ghost" className="h-8 px-2" onClick={() => void handleOpenImage(bill.image_path)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-[var(--color-ink-muted)]">없음</span>
-                    )}
-                  </TD>
-                  <TD>
-                    <input
-                      className="h-9 w-full rounded-lg border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-2 text-xs"
-                      value={memoDrafts[bill.id] ?? ""}
-                      onChange={(event) =>
-                        setMemoDrafts((prev) => ({
-                          ...prev,
-                          [bill.id]: event.target.value,
-                        }))
-                      }
-                      placeholder="메모 입력"
-                    />
-                  </TD>
-                  <TD className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" className="h-8 px-2" onClick={() => openEdit(bill)}>
-                        <SquarePen className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" className="h-8 px-2" onClick={() => void handleDelete(bill.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        </div>
+      {/* Table Area */}
+      <div className="w-full overflow-x-auto border border-[#2a2a2a] bg-[#141414]">
+        <table className="w-full text-left border-collapse text-sm whitespace-nowrap">
+          <thead>
+            <tr className="border-b border-[#3a3a3a] bg-[#1a1a1a]">
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest">Category</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest">Month</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest text-right">Amount</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest text-center">Status</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest text-center">Receipt</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest w-full min-w-[200px]">Memo (Auto-save)</th>
+              <th className="p-4 text-[#b0b0b0] font-normal uppercase text-xs tracking-widest text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredBills.map(bill => (
+              <tr key={bill.id} className="border-b border-[#2a2a2a] hover:bg-[#1a1a1a] transition-colors group">
+                <td className="p-4 text-[#ffffff] font-medium">{bill.category}</td>
+                <td className="p-4 text-[#d4d4d4]">{bill.billing_month}</td>
+                <td className="p-4 text-[#ffffff] text-right">{formatCurrency(bill.amount)}</td>
+                <td className="p-4 text-center">
+                  <button onClick={() => void handleTogglePaid(bill)} className={`px-2 py-1 text-[10px] uppercase tracking-widest border transition-colors ${bill.is_paid ? 'bg-[#1a1a1a] text-[#9a9a9a] border-[#3a3a3a] hover:border-[#9a9a9a]' : 'bg-[#ff4d6d]/10 text-[#ff4d6d] border-[#ff4d6d] font-bold hover:bg-[#ff4d6d]/20'}`}>
+                    {bill.is_paid ? 'Paid' : 'Unpaid'}
+                  </button>
+                </td>
+                <td className="p-4 text-center">
+                   {bill.image_path ? (
+                      <button onClick={() => void handleOpenImage(bill.image_path)} className="text-[#d4d4d4] hover:text-[#ffffff] mx-auto block transition-colors">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                   ) : (
+                      <span className="text-[#3a3a3a]">-</span>
+                   )}
+                </td>
+                <td className="p-4">
+                   <input 
+                     type="text"
+                     value={memoDrafts[bill.id] ?? ""}
+                     onChange={(e) => setMemoDrafts(prev => ({...prev, [bill.id]: e.target.value}))}
+                     className="w-full bg-transparent border-b border-transparent focus:border-[#3a3a3a] text-[#d4d4d4] p-1 outline-none transition-colors"
+                     placeholder="Add memo..."
+                   />
+                </td>
+                <td className="p-4 text-right">
+                   <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openEdit(bill)} className="text-[#9a9a9a] hover:text-[#ffffff] transition-colors"><SquarePen className="w-4 h-4" /></button>
+                      <button onClick={() => void handleDelete(bill.id)} className="text-[#9a9a9a] hover:text-[#ff4d6d] transition-colors"><Trash2 className="w-4 h-4" /></button>
+                   </div>
+                </td>
+              </tr>
+            ))}
+            {filteredBills.length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-12 text-center text-[#9a9a9a] uppercase tracking-widest text-xs">No records found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-        <div className="mt-4 space-y-2 lg:hidden">
-          {filteredBills.map((bill) => (
-            <div key={bill.id} className="rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(16_27_43/65%)] p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium">
-                    {bill.category} · {bill.billing_month}
-                  </p>
-                  <p className="display-font text-lg">{formatCurrency(bill.amount)}</p>
+      <GrokModal open={editorOpen} onClose={() => setEditorOpen(false)} title={editor.id ? "Edit Record" : "New Record"}>
+        <div className="space-y-6">
+          {/* Mode Switcher */}
+          <div className="flex p-1 bg-[#0a0a0a] border border-[#2a2a2a]">
+            <button 
+              onClick={() => setEditorMode("manual")}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${editorMode === 'manual' ? 'bg-[#ffffff] text-[#0a0a0a]' : 'text-[#b0b0b0] hover:text-[#ffffff]'}`}
+            >
+              Manual Input
+            </button>
+            <button 
+              onClick={() => setEditorMode("ai")}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider flex justify-center items-center gap-2 transition-colors ${editorMode === 'ai' ? 'bg-[#ffffff] text-[#0a0a0a]' : 'text-[#b0b0b0] hover:text-[#ffffff]'}`}
+            >
+              <Bot className="w-4 h-4" /> AI Analysis
+            </button>
+          </div>
+
+          {/* AI Analysis Form */}
+          {editorMode === "ai" && (
+            <div className="border border-[#2a2a2a] bg-[#0a0a0a] p-4">
+              <div className="mb-4">
+                <label className="block text-[#b0b0b0] text-xs uppercase tracking-widest mb-2">Upload Receipt</label>
+                <div className="border-2 border-dashed border-[#3a3a3a] p-8 text-center hover:border-[#ffffff] transition-colors relative cursor-pointer bg-[#141414]">
+                   <input type="file" accept="image/*" onChange={(e) => setBillImageFile(e.target.files?.[0] ?? null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                   {billImageFile ? (
+                     <div className="flex flex-col items-center">
+                       <FileText className="w-8 h-8 text-[#ffffff] mb-3" />
+                       <span className="text-[#ffffff] text-sm font-medium">{billImageFile.name}</span>
+                     </div>
+                   ) : (
+                     <div className="flex flex-col items-center">
+                       <UploadCloud className="w-8 h-8 text-[#9a9a9a] mb-3" />
+                       <span className="text-[#9a9a9a] text-sm">Click or drag image here</span>
+                     </div>
+                   )}
                 </div>
-                <button type="button" onClick={() => void handleTogglePaid(bill)}>
-                  <Badge tone={bill.is_paid ? "brand" : "warning"}>{bill.is_paid ? "납부 완료" : "미납"}</Badge>
-                </button>
               </div>
-              <input
-                className="mt-2 h-9 w-full rounded-lg border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-2 text-xs"
-                value={memoDrafts[bill.id] ?? ""}
-                onChange={(event) =>
-                  setMemoDrafts((prev) => ({
-                    ...prev,
-                    [bill.id]: event.target.value,
-                  }))
-                }
-                placeholder="메모 입력 (자동 저장)"
-              />
-              <div className="mt-2 flex justify-end gap-1">
-                {bill.image_path ? (
-                  <Button variant="ghost" className="h-8 px-2" onClick={() => void handleOpenImage(bill.image_path)}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                ) : null}
-                <Button variant="ghost" className="h-8 px-2" onClick={() => openEdit(bill)}>
-                  <SquarePen className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" className="h-8 px-2" onClick={() => void handleDelete(bill.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              <button 
+                onClick={() => void handleAnalyze()} 
+                disabled={analyzing}
+                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-[#ffffff] py-3 text-sm font-bold uppercase tracking-widest hover:bg-[#2a2a2a] flex justify-center items-center gap-2 disabled:opacity-50 transition-colors"
+              >
+                {analyzing ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                {analyzing ? "ANALYZING..." : "RUN AI ANALYSIS"}
+              </button>
+
+              {/* Analysis Results Display */}
+              {editor.processing_status === "processed" && (
+                <div className="mt-4 p-4 border border-[#ffffff] bg-[#141414]">
+                   <h3 className="text-[#ffffff] text-xs uppercase tracking-widest font-bold mb-4 flex items-center gap-2">
+                     <CheckCircle2 className="w-4 h-4 text-[#ffffff]" /> Analysis Complete
+                   </h3>
+                   <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                     <div><span className="text-[#9a9a9a] block text-[10px] uppercase tracking-widest mb-1">Category</span><span className="text-[#ffffff] font-medium">{editor.category}</span></div>
+                     <div><span className="text-[#9a9a9a] block text-[10px] uppercase tracking-widest mb-1">Month</span><span className="text-[#ffffff] font-medium">{editor.billing_month}</span></div>
+                     <div className="col-span-2"><span className="text-[#9a9a9a] block text-[10px] uppercase tracking-widest mb-1">Amount</span><span className="text-[#ffffff] text-xl font-bold">{formatCurrency(Number(editor.amount))} KRW</span></div>
+                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual Form */}
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[#b0b0b0] text-xs uppercase tracking-widest mb-2">Category</label>
+                <select 
+                  value={editor.category} 
+                  onChange={e => setEditor(prev => ({...prev, category: e.target.value as UtilityCategory}))}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2a] text-[#ffffff] p-3 text-sm focus:border-[#ffffff] outline-none transition-colors appearance-none"
+                >
+                  {UTILITY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[#b0b0b0] text-xs uppercase tracking-widest mb-2">Billing Month</label>
+                <input 
+                  type="month" 
+                  value={editor.billing_month} 
+                  onChange={e => setEditor(prev => ({...prev, billing_month: e.target.value}))}
+                  className="w-full bg-[#0a0a0a] border border-[#2a2a2a] text-[#ffffff] p-3 text-sm focus:border-[#ffffff] outline-none transition-colors [color-scheme:dark]"
+                />
               </div>
             </div>
-          ))}
-        </div>
+            
+            <div>
+              <label className="block text-[#b0b0b0] text-xs uppercase tracking-widest mb-2">Amount (KRW)</label>
+              <input 
+                type="number" 
+                min={0}
+                value={editor.amount} 
+                onChange={e => setEditor(prev => ({...prev, amount: e.target.value}))}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2a] text-[#ffffff] p-4 text-xl font-bold focus:border-[#ffffff] outline-none transition-colors placeholder:text-[#3a3a3a]"
+                placeholder="0"
+              />
+            </div>
 
-        {filteredBills.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-[rgb(26_26_26/72%)] px-3 py-4 text-sm text-[var(--color-ink-muted)]">등록된 공과금이 없습니다.</p>
-        ) : null}
-      </Card>
+            <div>
+              <label className="block text-[#b0b0b0] text-xs uppercase tracking-widest mb-2">Memo (Optional)</label>
+              <textarea 
+                value={editor.memo} 
+                onChange={e => setEditor(prev => ({...prev, memo: e.target.value}))}
+                className="w-full bg-[#0a0a0a] border border-[#2a2a2a] text-[#ffffff] p-3 text-sm min-h-[100px] focus:border-[#ffffff] outline-none resize-none transition-colors placeholder:text-[#3a3a3a]"
+                placeholder="Add notes..."
+              />
+            </div>
 
-      <Modal open={editorOpen} onClose={() => setEditorOpen(false)} title={editor.id ? "공과금 수정" : "공과금 등록"}>
-        <div className="space-y-3">
-          <div className="inline-flex rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(10_19_31/75%)] p-1">
-            {[
-              { id: "manual" as const, label: "수동 입력" },
-              { id: "ai" as const, label: "AI 이미지 분석" },
-            ].map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => setEditorMode(mode.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm ${
-                  editorMode === mode.id ? "bg-[rgb(35_63_94/85%)] text-[var(--color-brand)]" : "text-[var(--color-ink-muted)]"
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
+            <label className="flex items-center gap-3 p-4 border border-[#2a2a2a] bg-[#0a0a0a] cursor-pointer hover:border-[#3a3a3a] transition-colors">
+              <input 
+                type="checkbox" 
+                checked={editor.is_paid} 
+                onChange={e => setEditor(prev => ({...prev, is_paid: e.target.checked}))}
+                className="w-5 h-5 accent-[#ffffff] bg-[#0a0a0a] border-[#2a2a2a] cursor-pointer"
+              />
+              <span className="text-[#ffffff] text-sm uppercase tracking-widest font-bold">Mark as Paid</span>
+            </label>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-[rgb(42_42_42/45%)] p-3">
-            <p className="text-xs text-[var(--color-ink-muted)]">고지서 이미지</p>
-            <Input type="file" accept="image/*" onChange={(event) => setBillImageFile(event.target.files?.[0] ?? null)} />
-            {billImageFile ? <p className="text-xs text-[var(--color-brand)]">{billImageFile.name}</p> : null}
-            {editorMode === "ai" ? (
-              <Button className="w-full" variant="outline" onClick={() => void handleAnalyze()} disabled={analyzing}>
-                {analyzing ? <LoaderCircle className="mr-1 h-4 w-4 animate-spin" /> : <Bot className="mr-1 h-4 w-4" />}
-                AI 분석 실행
-              </Button>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 text-sm"
-              value={editor.category}
-              onChange={(event) => setEditor((prev) => ({ ...prev, category: event.target.value as UtilityCategory }))}
-            >
-              {UTILITY_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-            <Input
-              type="month"
-              value={editor.billing_month}
-              onChange={(event) => setEditor((prev) => ({ ...prev, billing_month: event.target.value }))}
-            />
-          </div>
-
-          <Input
-            type="number"
-            min={0}
-            value={editor.amount}
-            onChange={(event) => setEditor((prev) => ({ ...prev, amount: event.target.value }))}
-            placeholder="금액"
-          />
-
-          <textarea
-            className="min-h-24 w-full rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
-            value={editor.memo}
-            onChange={(event) => setEditor((prev) => ({ ...prev, memo: event.target.value }))}
-            placeholder="메모"
-          />
-
-          <label className="flex items-center gap-2 rounded-xl border border-[rgb(42_42_42/45%)] px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              checked={editor.is_paid}
-              onChange={(event) => setEditor((prev) => ({ ...prev, is_paid: event.target.checked }))}
-            />
-            납부 완료
-          </label>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditorOpen(false)}>
-              취소
-            </Button>
-            <Button onClick={() => void handleSave()}>
-              <CheckCircle2 className="mr-1 h-4 w-4" /> 저장
-            </Button>
+          <div className="flex gap-3 pt-6 border-t border-[#2a2a2a]">
+            <button onClick={() => setEditorOpen(false)} className="flex-1 py-4 border border-[#2a2a2a] text-[#ffffff] text-xs tracking-widest font-bold uppercase hover:bg-[#1a1a1a] transition-colors">
+              Cancel
+            </button>
+            <button onClick={() => void handleSave()} className="flex-1 py-4 bg-[#ffffff] text-[#0a0a0a] text-xs tracking-widest font-bold uppercase hover:bg-[#e5e5e5] flex justify-center items-center gap-2 transition-colors">
+              <CheckCircle2 className="w-4 h-4" /> Save Record
+            </button>
           </div>
         </div>
-      </Modal>
+      </GrokModal>
     </div>
   );
 }

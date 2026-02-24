@@ -257,7 +257,8 @@ export async function deleteUtilityBill(billId: string): Promise<ActionResult> {
   }
 }
 
-export async function uploadUtilityBillImage(file: File): Promise<ActionResult<{ filePath: string }>> {
+export async function uploadUtilityBillImage(formData: FormData): Promise<ActionResult<{ filePath: string }>> {
+  const file = formData.get("file");
   if (!(file instanceof File)) {
     return actionError("고지서 이미지 파일이 필요합니다.");
   }
