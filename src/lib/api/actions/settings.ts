@@ -29,6 +29,9 @@ const aiModelSchema = z.object({
   model: z.string().trim().min(1, "AI 모델을 선택해주세요."),
 });
 
+const ADMIN_REQUIRED_MESSAGE = "관리자 권한이 필요합니다.";
+const INVALID_INPUT_MESSAGE = "입력값을 확인해주세요.";
+
 async function resolveRole(userId: string) {
   const { supabase } = await getActionContext();
   const { data } = await supabase.from("app_users").select("role").eq("id", userId).maybeSingle();
@@ -38,8 +41,19 @@ async function resolveRole(userId: string) {
 async function ensureAdmin(userId: string) {
   const role = await resolveRole(userId);
   if (role !== "admin") {
-    throw new Error("관리자 권한이 필요합니다.");
+    throw new Error(ADMIN_REQUIRED_MESSAGE);
   }
+}
+
+function getValidationMessage(result: z.ZodSafeParseError<unknown>) {
+  return result.error.issues[0]?.message ?? INVALID_INPUT_MESSAGE;
+}
+
+function handleAdminActionError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error && error.message === ADMIN_REQUIRED_MESSAGE) {
+    return actionError(error.message);
+  }
+  return actionError(fallbackMessage);
 }
 
 function generateInviteCode(length = 8) {
@@ -55,7 +69,7 @@ function generateInviteCode(length = 8) {
 export async function updateMyProfile(input: z.infer<typeof profileSchema>): Promise<ActionResult> {
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success) {
-    return actionError(parsed.error.issues[0]?.message ?? "입력값을 확인해주세요.");
+    return actionError(getValidationMessage(parsed));
   }
 
   try {
@@ -84,7 +98,7 @@ export async function updateMyProfile(input: z.infer<typeof profileSchema>): Pro
 export async function createInviteCode(input: z.infer<typeof inviteCodeSchema>): Promise<ActionResult<{ id: string; code: string }>> {
   const parsed = inviteCodeSchema.safeParse(input);
   if (!parsed.success) {
-    return actionError(parsed.error.issues[0]?.message ?? "입력값을 확인해주세요.");
+    return actionError(getValidationMessage(parsed));
   }
 
   try {
@@ -115,10 +129,7 @@ export async function createInviteCode(input: z.infer<typeof inviteCodeSchema>):
     revalidatePath("/settings");
     return actionSuccess({ id: data.id, code });
   } catch (error) {
-    if (error instanceof Error && error.message === "관리자 권한이 필요합니다.") {
-      return actionError(error.message);
-    }
-    return actionError("초대코드 생성 중 오류가 발생했습니다.");
+    return handleAdminActionError(error, "초대코드 생성 중 오류가 발생했습니다.");
   }
 }
 
@@ -139,10 +150,7 @@ export async function toggleInviteCodeActive(inviteCodeId: string, isActive: boo
     revalidatePath("/settings");
     return actionSuccess(undefined);
   } catch (error) {
-    if (error instanceof Error && error.message === "관리자 권한이 필요합니다.") {
-      return actionError(error.message);
-    }
-    return actionError("초대코드 상태 변경 중 오류가 발생했습니다.");
+    return handleAdminActionError(error, "초대코드 상태 변경 중 오류가 발생했습니다.");
   }
 }
 
@@ -168,17 +176,14 @@ export async function revealInviteCode(inviteCodeId: string): Promise<ActionResu
     const code = decryptWithIv(data.code_encrypted, data.iv);
     return actionSuccess({ code });
   } catch (error) {
-    if (error instanceof Error && error.message === "관리자 권한이 필요합니다.") {
-      return actionError(error.message);
-    }
-    return actionError("초대코드 복호화에 실패했습니다.");
+    return handleAdminActionError(error, "초대코드 복호화에 실패했습니다.");
   }
 }
 
 export async function saveAiModelSetting(input: z.infer<typeof aiModelSchema>): Promise<ActionResult> {
   const parsed = aiModelSchema.safeParse(input);
   if (!parsed.success) {
-    return actionError(parsed.error.issues[0]?.message ?? "입력값을 확인해주세요.");
+    return actionError(getValidationMessage(parsed));
   }
 
   try {
