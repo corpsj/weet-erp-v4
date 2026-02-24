@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, SquarePen, Trash2 } from "lucide-react";
+import { Plus, Search, SquarePen, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,6 +22,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { BankTransaction, BankTransactionCategory, BankTransactionType } from "@/types/bank-transaction";
 
 type TypeFilter = "all" | BankTransactionType;
+type CategoryFilter = "all" | "uncategorized" | BankTransactionCategory;
 
 type EditorState = {
   id?: string;
@@ -43,6 +44,9 @@ const TYPE_LABEL: Record<BankTransactionType, string> = {
 export function BankTransactionsWorkspace() {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [search, setSearch] = useState("");
+  const [monthFilter, setMonthFilter] = useState(() => new Date().toISOString().slice(0, 7));
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>({
     transaction_date: new Date().toISOString().slice(0, 16),
@@ -57,27 +61,67 @@ export function BankTransactionsWorkspace() {
 
   const { data: transactions, isLoading, isError, refetch } = useBankTransactions();
 
+  const latestKnownBalance = useMemo(() => {
+    const latest = (transactions ?? []).find((item) => item.balance_after !== null);
+    return latest?.balance_after ?? null;
+  }, [transactions]);
+
   useEffect(() => {
     void markMenuAsRead("bank_transactions");
   }, []);
 
   const filteredTransactions = useMemo(() => {
     const base = transactions ?? [];
-    if (typeFilter === "all") return base;
-    return base.filter((item) => item.type === typeFilter);
-  }, [transactions, typeFilter]);
+    const query = search.trim().toLowerCase();
 
-  const summary = useMemo(() => {
-    const depositTotal = (transactions ?? []).filter((item) => item.type === "deposit").reduce((sum, item) => sum + item.amount, 0);
-    const withdrawalTotal = (transactions ?? [])
+    return base.filter((item) => {
+      if (typeFilter !== "all" && item.type !== typeFilter) {
+        return false;
+      }
+      if (categoryFilter === "uncategorized" && item.category !== null) {
+        return false;
+      }
+      if (categoryFilter !== "all" && categoryFilter !== "uncategorized" && item.category !== categoryFilter) {
+        return false;
+      }
+      if (monthFilter && !item.transaction_date.startsWith(monthFilter)) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+
+      const searchable = [
+        item.description ?? "",
+        item.bank_name ?? "",
+        item.account_number ?? "",
+        item.category ?? "",
+        formatCurrency(item.amount),
+        item.transaction_date.slice(0, 10),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(query);
+    });
+  }, [transactions, typeFilter, categoryFilter, monthFilter, search]);
+
+  const filteredSummary = useMemo(() => {
+    const depositTotal = filteredTransactions.filter((item) => item.type === "deposit").reduce((sum, item) => sum + item.amount, 0);
+    const withdrawalTotal = filteredTransactions
       .filter((item) => item.type === "withdrawal")
       .reduce((sum, item) => sum + item.amount, 0);
+
+    const latestBalance = filteredTransactions.find((item) => item.balance_after !== null)?.balance_after ?? null;
+
     return {
       depositTotal,
       withdrawalTotal,
       netBalance: depositTotal - withdrawalTotal,
+      latestBalance,
+      count: filteredTransactions.length,
     };
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const refreshQueries = async () => {
     await Promise.all([
@@ -95,7 +139,7 @@ export function BankTransactionsWorkspace() {
       description: "",
       bank_name: "",
       account_number: "",
-      balance_after: "",
+      balance_after: latestKnownBalance === null ? "" : String(latestKnownBalance),
       category: "",
     });
     setEditorOpen(true);
@@ -117,9 +161,14 @@ export function BankTransactionsWorkspace() {
   };
 
   const handleSave = async () => {
+    const transactionDate = new Date(editor.transaction_date);
     const amount = Number(editor.amount);
     const balanceAfter = editor.balance_after.trim() === "" ? null : Number(editor.balance_after);
 
+    if (Number.isNaN(transactionDate.getTime())) {
+      toast.error("거래일을 올바르게 입력해주세요.");
+      return;
+    }
     if (!Number.isFinite(amount) || amount < 0) {
       toast.error("금액을 올바르게 입력해주세요.");
       return;
@@ -130,7 +179,7 @@ export function BankTransactionsWorkspace() {
     }
 
     const payload = {
-      transaction_date: new Date(editor.transaction_date).toISOString(),
+      transaction_date: transactionDate.toISOString(),
       type: editor.type,
       amount,
       description: editor.description,
@@ -160,6 +209,10 @@ export function BankTransactionsWorkspace() {
   };
 
   const handleDelete = async (transactionId: string) => {
+    if (!window.confirm("선택한 거래를 삭제하시겠습니까?")) {
+      return;
+    }
+
     const result = await deleteBankTransaction(transactionId);
     if (!result.ok) {
       toast.error(result.message);
@@ -182,7 +235,7 @@ export function BankTransactionsWorkspace() {
   if (isError) {
     return (
       <Card className="mt-4 p-6">
-        <p className="text-sm text-[var(--color-danger)]">입출금 데이터를 불러오지 못했습니다.</p>
+        <p className="text-sm text-[#ff4d6d]">입출금 데이터를 불러오지 못했습니다.</p>
         <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
           다시 시도
         </Button>
@@ -192,26 +245,34 @@ export function BankTransactionsWorkspace() {
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-ink-muted)]">총 입금액</p>
-          <p className="display-font mt-1 text-2xl text-[var(--color-brand)]">{formatCurrency(summary.depositTotal)}</p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-[#2a2a2a] bg-[#141414] p-4">
+          <p className="text-xs text-[#9a9a9a]">입금 합계</p>
+          <p className="display-font mt-1 text-2xl text-[#ffffff]">{formatCurrency(filteredSummary.depositTotal)}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-ink-muted)]">총 출금액</p>
-          <p className="display-font mt-1 text-2xl text-[var(--color-warning)]">{formatCurrency(summary.withdrawalTotal)}</p>
+        <Card className="border-[#2a2a2a] bg-[#141414] p-4">
+          <p className="text-xs text-[#9a9a9a]">출금 합계</p>
+          <p className="display-font mt-1 text-2xl text-[#ff4d6d]">{formatCurrency(filteredSummary.withdrawalTotal)}</p>
         </Card>
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-ink-muted)]">순잔액</p>
-          <p className={`display-font mt-1 text-2xl ${summary.netBalance >= 0 ? "text-[var(--color-brand-2)]" : "text-[var(--color-danger)]"}`}>
-            {formatCurrency(summary.netBalance)}
+        <Card className="border-[#2a2a2a] bg-[#141414] p-4">
+          <p className="text-xs text-[#9a9a9a]">순증감</p>
+          <p className={`display-font mt-1 text-2xl ${filteredSummary.netBalance < 0 ? "text-[#ff4d6d]" : "text-[#ffffff]"}`}>
+            {filteredSummary.netBalance < 0 ? "-" : "+"}
+            {formatCurrency(Math.abs(filteredSummary.netBalance))}
+          </p>
+        </Card>
+        <Card className="border-[#2a2a2a] bg-[#141414] p-4">
+          <p className="text-xs text-[#9a9a9a]">거래수 / 최신 잔액</p>
+          <p className="display-font mt-1 text-2xl text-[#e5e5e5]">{filteredSummary.count.toLocaleString("ko-KR")}건</p>
+          <p className="mt-1 text-xs text-[#b0b0b0]">
+            {filteredSummary.latestBalance === null ? "잔액 정보 없음" : formatCurrency(filteredSummary.latestBalance)}
           </p>
         </Card>
       </div>
 
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(10_19_31/75%)] p-1">
+      <Card className="border-[#2a2a2a] bg-[#141414] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-md border border-[#2a2a2a] bg-[#0a0a0a] p-1">
             {[
               { id: "all" as const, label: "전체" },
               { id: "deposit" as const, label: "입금" },
@@ -221,8 +282,8 @@ export function BankTransactionsWorkspace() {
                 key={tab.id}
                 type="button"
                 onClick={() => setTypeFilter(tab.id)}
-                className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                  typeFilter === tab.id ? "bg-[rgb(35_63_94/85%)] text-[var(--color-brand)]" : "text-[var(--color-ink-muted)]"
+                className={`rounded-md px-3 py-1.5 text-sm transition ${
+                  typeFilter === tab.id ? "bg-[#e5e5e5] text-[#0a0a0a]" : "text-[#9a9a9a]"
                 }`}
               >
                 {tab.label}
@@ -234,6 +295,32 @@ export function BankTransactionsWorkspace() {
           </Button>
         </div>
 
+        <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+          <div className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a9a9a]" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="적요, 은행명, 계좌번호, 카테고리 검색"
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
+            className="h-10 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 text-sm text-[#e5e5e5]"
+          >
+            <option value="all">전체 카테고리</option>
+            <option value="uncategorized">미분류</option>
+            {BANK_TRANSACTION_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+          <Input type="month" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} className="w-full md:w-[180px]" />
+        </div>
+
         <div className="mt-4">
           <Table>
             <THead>
@@ -241,6 +328,7 @@ export function BankTransactionsWorkspace() {
                 <TH>거래일</TH>
                 <TH>유형</TH>
                 <TH className="text-right">금액</TH>
+                <TH>카테고리</TH>
                 <TH>적요</TH>
                 <TH>은행명</TH>
                 <TH>계좌번호</TH>
@@ -251,28 +339,30 @@ export function BankTransactionsWorkspace() {
             <TBody>
               {filteredTransactions.map((transaction) => (
                 <TR key={transaction.id}>
-                  <TD>{transaction.transaction_date.slice(0, 10)}</TD>
+                  <TD>{transaction.transaction_date.slice(0, 16).replace("T", " ")}</TD>
                   <TD>
-                    <Badge tone={transaction.type === "deposit" ? "brand" : "warning"}>{TYPE_LABEL[transaction.type]}</Badge>
+                    <Badge tone={transaction.type === "withdrawal" ? "danger" : "neutral"} className={transaction.type === "deposit" ? "border-[#e5e5e5] text-[#ffffff]" : ""}>
+                      {TYPE_LABEL[transaction.type]}
+                    </Badge>
                   </TD>
-                  <TD className={`text-right font-semibold ${transaction.type === "deposit" ? "text-[var(--color-brand)]" : "text-[var(--color-warning)]"}`}>
+                  <TD className={`text-right font-semibold ${transaction.type === "withdrawal" ? "text-[#ff4d6d]" : "text-[#ffffff]"}`}>
                     {formatCurrency(transaction.amount)}
                   </TD>
+                  <TD>{transaction.category ?? "-"}</TD>
                   <TD>
                     <div>
                       <p>{transaction.description ?? "-"}</p>
-                      {transaction.category ? <p className="text-xs text-[var(--color-ink-muted)]">{transaction.category}</p> : null}
                     </div>
                   </TD>
                   <TD>{transaction.bank_name ?? "-"}</TD>
                   <TD>{transaction.account_number ?? "-"}</TD>
-                  <TD className="text-right">{transaction.balance_after === null ? "-" : formatCurrency(transaction.balance_after)}</TD>
+                  <TD className="text-right text-[#d4d4d4]">{transaction.balance_after === null ? "-" : formatCurrency(transaction.balance_after)}</TD>
                   <TD className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" className="h-8 px-2" onClick={() => openEdit(transaction)}>
                         <SquarePen className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" className="h-8 px-2" onClick={() => void handleDelete(transaction.id)}>
+                      <Button variant="ghost" className="h-8 px-2 text-[#ff4d6d] hover:bg-[#2a2a2a]" onClick={() => void handleDelete(transaction.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -284,7 +374,9 @@ export function BankTransactionsWorkspace() {
         </div>
 
         {filteredTransactions.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-[rgb(26_26_26/72%)] px-3 py-4 text-sm text-[var(--color-ink-muted)]">등록된 입출금 내역이 없습니다.</p>
+          <p className="mt-4 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 py-4 text-sm text-[#9a9a9a]">
+            조건에 맞는 입출금 내역이 없습니다.
+          </p>
         ) : null}
       </Card>
 
@@ -297,7 +389,7 @@ export function BankTransactionsWorkspace() {
               onChange={(event) => setEditor((prev) => ({ ...prev, transaction_date: event.target.value }))}
             />
             <select
-              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 text-sm"
+              className="h-10 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 text-sm text-[#e5e5e5]"
               value={editor.type}
               onChange={(event) => setEditor((prev) => ({ ...prev, type: event.target.value as BankTransactionType }))}
             >
@@ -342,7 +434,7 @@ export function BankTransactionsWorkspace() {
               placeholder="거래 후 잔액"
             />
             <select
-              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 text-sm"
+              className="h-10 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 text-sm text-[#e5e5e5]"
               value={editor.category}
               onChange={(event) => setEditor((prev) => ({ ...prev, category: event.target.value as BankTransactionCategory | "" }))}
             >
