@@ -20,6 +20,8 @@ const vaultSchema = z.object({
   memo: z.string().max(6000, "메모가 너무 깁니다.").optional(),
 });
 
+const entryIdSchema = z.uuid("유효한 계정 ID가 아닙니다.");
+
 export async function createVaultEntry(input: VaultEntryInput): Promise<ActionResult<{ id: string }>> {
   const parsed = vaultSchema.safeParse(input);
   if (!parsed.success || !parsed.data.password) {
@@ -56,8 +58,9 @@ export async function createVaultEntry(input: VaultEntryInput): Promise<ActionRe
 }
 
 export async function updateVaultEntry(entryId: string, input: VaultEntryInput): Promise<ActionResult> {
-  if (!entryId) {
-    return actionError("수정할 계정을 찾을 수 없습니다.");
+  const parsedEntryId = entryIdSchema.safeParse(entryId);
+  if (!parsedEntryId.success) {
+    return actionError(parsedEntryId.error.issues[0]?.message ?? "수정할 계정을 찾을 수 없습니다.");
   }
 
   const parsed = vaultSchema.safeParse(input);
@@ -66,7 +69,7 @@ export async function updateVaultEntry(entryId: string, input: VaultEntryInput):
   }
 
   try {
-    const { supabase } = await getActionContext();
+    const { supabase, user } = await getActionContext();
     let passwordPayload: { password_encrypted: string; iv: string } | null = null;
 
     if (parsed.data.password) {
@@ -77,7 +80,7 @@ export async function updateVaultEntry(entryId: string, input: VaultEntryInput):
       };
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("vault_entries")
       .update({
         site_name: parsed.data.site_name,
@@ -86,9 +89,12 @@ export async function updateVaultEntry(entryId: string, input: VaultEntryInput):
         memo: parsed.data.memo?.trim() || null,
         ...(passwordPayload ?? {}),
       })
-      .eq("id", entryId);
+      .eq("id", parsedEntryId.data)
+      .eq("created_by", user.id)
+      .select("id")
+      .single();
 
-    if (error) {
+    if (error || !data) {
       return actionError("계정 정보를 수정하지 못했습니다.");
     }
 
@@ -100,14 +106,22 @@ export async function updateVaultEntry(entryId: string, input: VaultEntryInput):
 }
 
 export async function deleteVaultEntry(entryId: string): Promise<ActionResult> {
-  if (!entryId) {
-    return actionError("삭제할 계정을 찾을 수 없습니다.");
+  const parsedEntryId = entryIdSchema.safeParse(entryId);
+  if (!parsedEntryId.success) {
+    return actionError(parsedEntryId.error.issues[0]?.message ?? "삭제할 계정을 찾을 수 없습니다.");
   }
 
   try {
-    const { supabase } = await getActionContext();
-    const { error } = await supabase.from("vault_entries").delete().eq("id", entryId);
-    if (error) {
+    const { supabase, user } = await getActionContext();
+    const { data, error } = await supabase
+      .from("vault_entries")
+      .delete()
+      .eq("id", parsedEntryId.data)
+      .eq("created_by", user.id)
+      .select("id")
+      .single();
+
+    if (error || !data) {
       return actionError("계정 삭제에 실패했습니다.");
     }
 
@@ -119,16 +133,18 @@ export async function deleteVaultEntry(entryId: string): Promise<ActionResult> {
 }
 
 export async function revealVaultPassword(entryId: string): Promise<ActionResult<{ password: string }>> {
-  if (!entryId) {
-    return actionError("비밀번호를 확인할 계정을 찾을 수 없습니다.");
+  const parsedEntryId = entryIdSchema.safeParse(entryId);
+  if (!parsedEntryId.success) {
+    return actionError(parsedEntryId.error.issues[0]?.message ?? "비밀번호를 확인할 계정을 찾을 수 없습니다.");
   }
 
   try {
-    const { supabase } = await getActionContext();
+    const { supabase, user } = await getActionContext();
     const { data, error } = await supabase
       .from("vault_entries")
       .select("password_encrypted, iv")
-      .eq("id", entryId)
+      .eq("id", parsedEntryId.data)
+      .eq("created_by", user.id)
       .single();
 
     if (error || !data?.password_encrypted || !data.iv) {
