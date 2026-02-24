@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileImage, Plus, Receipt, SquarePen, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Download, FileImage, FilterX, Plus, Receipt, Search, SquarePen, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -26,6 +26,8 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 
 const EXPENSE_CATEGORIES: ExpenseCategory[] = ["식비", "교통비", "사무용품", "현장 경비", "기타"];
 type ExpenseFilter = "all" | ExpenseStatus;
+type ExpenseCategoryFilter = "all" | ExpenseCategory;
+type DatePreset = "all" | "thisMonth" | "lastMonth" | "custom";
 
 type EditorState = {
   id?: string;
@@ -42,9 +44,26 @@ const STATUS_LABEL: Record<ExpenseStatus, string> = {
   paid: "지급 완료",
 };
 
+const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
+
+const getMonthRange = (offset = 0) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  return {
+    from: toDateInput(start),
+    to: toDateInput(end),
+  };
+};
+
 export function ExpensesWorkspace() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<ExpenseFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<ExpenseCategoryFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>({
     title: "",
@@ -75,9 +94,28 @@ export function ExpensesWorkspace() {
 
   const filteredExpenses = useMemo(() => {
     const base = expenses ?? [];
-    if (statusFilter === "all") return base;
-    return base.filter((item) => item.status === statusFilter);
-  }, [expenses, statusFilter]);
+    return base.filter((item) => {
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
+      if (dateFrom && item.used_date < dateFrom) return false;
+      if (dateTo && item.used_date > dateTo) return false;
+      if (keyword.trim()) {
+        const q = keyword.trim().toLowerCase();
+        const target = `${item.title} ${item.memo ?? ""}`.toLowerCase();
+        if (!target.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [expenses, statusFilter, categoryFilter, dateFrom, dateTo, keyword]);
+
+  const categorySummary = useMemo(() => {
+    return EXPENSE_CATEGORIES.map((category) => {
+      const total = filteredExpenses
+        .filter((item) => item.category === category)
+        .reduce((sum, item) => sum + item.amount, 0);
+      return { category, total };
+    }).filter((item) => item.total > 0);
+  }, [filteredExpenses]);
 
   const unpaidSummary = useMemo(() => {
     const unpaid = (expenses ?? []).filter((item) => item.status === "unpaid");
@@ -94,6 +132,62 @@ export function ExpensesWorkspace() {
       queryClient.invalidateQueries({ queryKey: ["hub-snapshot"] }),
       queryClient.invalidateQueries({ queryKey: ["menu-unread-counts"] }),
     ]);
+  };
+
+  const applyDatePreset = (preset: DatePreset) => {
+    setDatePreset(preset);
+    if (preset === "all") {
+      setDateFrom("");
+      setDateTo("");
+      return;
+    }
+    if (preset === "thisMonth") {
+      const range = getMonthRange(0);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+      return;
+    }
+    if (preset === "lastMonth") {
+      const range = getMonthRange(-1);
+      setDateFrom(range.from);
+      setDateTo(range.to);
+    }
+  };
+
+  const handleResetFilters = () => {
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setKeyword("");
+    applyDatePreset("all");
+  };
+
+  const handleExportCsv = () => {
+    if (filteredExpenses.length === 0) {
+      toast.error("내보낼 경비가 없습니다.");
+      return;
+    }
+    const header = ["제목", "사용일", "카테고리", "금액", "상태", "메모", "영수증 수"];
+    const rows = filteredExpenses.map((expense) => {
+      const receiptCount = (receiptMap.get(expense.id) ?? []).length;
+      return [
+        expense.title,
+        expense.used_date,
+        expense.category,
+        String(expense.amount),
+        STATUS_LABEL[expense.status],
+        expense.memo ?? "",
+        String(receiptCount),
+      ];
+    });
+    const escapeCell = (value: string) => `"${value.replaceAll("\"", '""')}"`;
+    const csv = [header, ...rows].map((row) => row.map(escapeCell).join(",")).join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `expenses-${toDateInput(new Date())}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   const openCreate = () => {
@@ -241,20 +335,25 @@ export function ExpensesWorkspace() {
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="p-4">
           <p className="text-xs text-[var(--color-ink-muted)]">미지급 건수</p>
           <p className="display-font mt-1 text-3xl">{unpaidSummary.count}건</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-[var(--color-ink-muted)]">미지급 총액</p>
-          <p className="display-font mt-1 text-3xl text-[var(--color-warning)]">{formatCurrency(unpaidSummary.amount)}</p>
+          <p className="display-font mt-1 text-3xl">{formatCurrency(unpaidSummary.amount)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-[var(--color-ink-muted)]">조회 결과</p>
+          <p className="display-font mt-1 text-3xl">{filteredExpenses.length}건</p>
         </Card>
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(10_19_31/75%)] p-1">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] p-1">
             {[
               { id: "all" as const, label: "전체" },
               { id: "unpaid" as const, label: "미지급" },
@@ -265,17 +364,113 @@ export function ExpensesWorkspace() {
                 type="button"
                 onClick={() => setStatusFilter(filter.id)}
                 className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                  statusFilter === filter.id ? "bg-[rgb(35_63_94/85%)] text-[var(--color-brand)]" : "text-[var(--color-ink-muted)]"
+                  statusFilter === filter.id
+                    ? "bg-[var(--color-ink)] text-[var(--color-bg)]"
+                    : "text-[var(--color-ink-muted)]"
                 }`}
               >
                 {filter.label}
               </button>
             ))}
+            </div>
+            <div className="inline-flex rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] p-1">
+              {[
+                { id: "all" as const, label: "카테고리 전체" },
+                ...EXPENSE_CATEGORIES.map((category) => ({ id: category, label: category })),
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(filter.id as ExpenseCategoryFilter)}
+                  className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                    categoryFilter === filter.id
+                      ? "bg-[var(--color-ink)] text-[var(--color-bg)]"
+                      : "text-[var(--color-ink-muted)]"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <Button onClick={openCreate}>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => void handleExportCsv()}>
+              <Download className="mr-1 h-4 w-4" /> CSV 내보내기
+            </Button>
+            <Button onClick={openCreate}>
             <Plus className="mr-1 h-4 w-4" /> 경비 등록
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 xl:grid-cols-[1fr_auto_auto_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-ink-muted)]" />
+            <Input
+              className="pl-9"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="제목/메모 검색"
+            />
+          </div>
+
+          <div className="inline-flex items-center rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] p-1">
+            {[
+              { id: "all" as const, label: "전체 기간" },
+              { id: "thisMonth" as const, label: "이번 달" },
+              { id: "lastMonth" as const, label: "지난 달" },
+              { id: "custom" as const, label: "직접 선택" },
+            ].map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyDatePreset(preset.id)}
+                className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                  datePreset === preset.id
+                    ? "bg-[var(--color-ink)] text-[var(--color-bg)]"
+                    : "text-[var(--color-ink-muted)]"
+                }`}
+              >
+                <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => {
+                setDatePreset("custom");
+                setDateFrom(event.target.value);
+              }}
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(event) => {
+                setDatePreset("custom");
+                setDateTo(event.target.value);
+              }}
+            />
+          </div>
+
+          <Button variant="ghost" onClick={handleResetFilters}>
+            <FilterX className="mr-1 h-4 w-4" /> 필터 초기화
           </Button>
         </div>
+
+        {categorySummary.length > 0 ? (
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {categorySummary.map((item) => (
+              <div key={item.category} className="rounded-lg border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-3 py-2">
+                <p className="text-xs text-[var(--color-ink-muted)]">{item.category}</p>
+                <p className="mt-1 text-sm font-semibold">{formatCurrency(item.total)}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="mt-4 hidden lg:block">
           <Table>
@@ -305,22 +500,23 @@ export function ExpensesWorkspace() {
                     <TD>{expense.category}</TD>
                     <TD className="text-right">{formatCurrency(expense.amount)}</TD>
                     <TD>
-                      <button type="button" onClick={() => void handleToggleStatus(expense)}>
-                        <Badge tone={expense.status === "paid" ? "brand" : "warning"}>{STATUS_LABEL[expense.status]}</Badge>
+                      <button type="button" className="rounded-md" onClick={() => void handleToggleStatus(expense)}>
+                        <Badge tone={expense.status === "paid" ? "neutral" : "danger"}>{STATUS_LABEL[expense.status]}</Badge>
                       </button>
                     </TD>
                     <TD>
-                      <div className="flex flex-wrap items-center gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <Badge tone="neutral">{receiptItems.length}장</Badge>
                         {receiptItems.slice(0, 2).map((receipt) => (
-                          <Button
+                          <button
                             key={receipt.id}
-                            variant="ghost"
-                            className="h-7 px-2"
+                            type="button"
+                            className="inline-flex h-7 max-w-[160px] items-center gap-1 rounded-md border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-2 text-xs"
                             onClick={() => void handleOpenReceipt(receipt.id)}
                           >
-                            <FileImage className="h-3.5 w-3.5" />
-                          </Button>
+                            <FileImage className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{receipt.file_name}</span>
+                          </button>
                         ))}
                       </div>
                     </TD>
@@ -345,7 +541,7 @@ export function ExpensesWorkspace() {
           {filteredExpenses.map((expense) => {
             const receiptItems = receiptMap.get(expense.id) ?? [];
             return (
-              <div key={expense.id} className="rounded-xl border border-[rgb(42_42_42/45%)] bg-[rgb(16_27_43/65%)] p-3">
+              <div key={expense.id} className="rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{expense.title}</p>
@@ -354,18 +550,24 @@ export function ExpensesWorkspace() {
                     </p>
                   </div>
                   <button type="button" onClick={() => void handleToggleStatus(expense)}>
-                    <Badge tone={expense.status === "paid" ? "brand" : "warning"}>{STATUS_LABEL[expense.status]}</Badge>
+                    <Badge tone={expense.status === "paid" ? "neutral" : "danger"}>{STATUS_LABEL[expense.status]}</Badge>
                   </button>
                 </div>
                 <p className="mt-2 display-font text-lg">{formatCurrency(expense.amount)}</p>
                 {expense.memo ? <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{expense.memo}</p> : null}
 
-                <div className="mt-2 flex items-center gap-1">
+                <div className="mt-2 space-y-1">
                   <Badge tone="neutral">영수증 {receiptItems.length}장</Badge>
                   {receiptItems.map((receipt) => (
-                    <Button key={receipt.id} variant="ghost" className="h-7 px-2" onClick={() => void handleOpenReceipt(receipt.id)}>
-                      <Receipt className="h-3.5 w-3.5" />
-                    </Button>
+                    <button
+                      key={receipt.id}
+                      type="button"
+                      className="flex w-full items-center gap-1.5 rounded-lg border border-[var(--color-line-2)] bg-[var(--color-bg)] px-2 py-1.5 text-xs"
+                      onClick={() => void handleOpenReceipt(receipt.id)}
+                    >
+                      <Receipt className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{receipt.file_name}</span>
+                    </button>
                   ))}
                 </div>
 
@@ -383,12 +585,15 @@ export function ExpensesWorkspace() {
         </div>
 
         {filteredExpenses.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-[rgb(26_26_26/72%)] px-3 py-4 text-sm text-[var(--color-ink-muted)]">등록된 경비가 없습니다.</p>
+          <p className="mt-4 rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-3 py-4 text-sm text-[var(--color-ink-muted)]">
+            조회 조건에 맞는 경비가 없습니다.
+          </p>
         ) : null}
       </Card>
 
       <Modal open={editorOpen} onClose={() => setEditorOpen(false)} title={editor.id ? "경비 수정" : "경비 등록"}>
         <div className="space-y-3">
+          <p className="text-xs text-[var(--color-ink-muted)]">실제 결제 기준으로 사용일/카테고리/상태를 입력해주세요.</p>
           <Input value={editor.title} onChange={(event) => setEditor((prev) => ({ ...prev, title: event.target.value }))} placeholder="제목" />
           <div className="grid grid-cols-2 gap-2">
             <Input
@@ -406,7 +611,7 @@ export function ExpensesWorkspace() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <select
-              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 text-sm"
+              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-3 text-sm"
               value={editor.category}
               onChange={(event) => setEditor((prev) => ({ ...prev, category: event.target.value as ExpenseCategory }))}
             >
@@ -417,7 +622,7 @@ export function ExpensesWorkspace() {
               ))}
             </select>
             <select
-              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 text-sm"
+              className="h-11 rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-3 text-sm"
               value={editor.status}
               onChange={(event) => setEditor((prev) => ({ ...prev, status: event.target.value as ExpenseStatus }))}
             >
@@ -426,13 +631,13 @@ export function ExpensesWorkspace() {
             </select>
           </div>
           <textarea
-            className="min-h-24 w-full rounded-xl border border-[var(--color-line-2)] bg-[rgb(14_14_14/85%)] px-3 py-2 text-sm outline-none focus:border-[var(--color-brand)]"
+            className="min-h-24 w-full rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] px-3 py-2 text-sm outline-none focus:border-[var(--color-ink)]"
             value={editor.memo}
             onChange={(event) => setEditor((prev) => ({ ...prev, memo: event.target.value }))}
             placeholder="메모"
           />
 
-          <div className="space-y-2 rounded-xl border border-[rgb(42_42_42/45%)] p-3">
+          <div className="space-y-2 rounded-xl border border-[var(--color-line-2)] bg-[var(--color-bg-panel)] p-3">
             <p className="text-xs text-[var(--color-ink-muted)]">영수증 업로드 (복수 선택 가능)</p>
             <Input
               type="file"
@@ -440,12 +645,15 @@ export function ExpensesWorkspace() {
               accept="image/*"
               onChange={(event) => setPendingFiles(Array.from(event.target.files ?? []))}
             />
-            {pendingFiles.length > 0 ? <p className="text-xs text-[var(--color-brand)]">선택된 파일 {pendingFiles.length}개</p> : null}
+            {pendingFiles.length > 0 ? <p className="text-xs text-[var(--color-ink)]">선택된 파일 {pendingFiles.length}개</p> : null}
 
             {editor.id ? (
               <div className="space-y-1">
                 {(receiptMap.get(editor.id) ?? []).map((receipt) => (
-                  <div key={receipt.id} className="flex items-center justify-between rounded-lg bg-[rgb(15_24_38/80%)] px-2 py-1.5 text-xs">
+                  <div
+                    key={receipt.id}
+                    className="flex items-center justify-between rounded-lg border border-[var(--color-line-2)] bg-[var(--color-bg)] px-2 py-1.5 text-xs"
+                  >
                     <button type="button" className="truncate text-left" onClick={() => void handleOpenReceipt(receipt.id)}>
                       {receipt.file_name}
                     </button>
