@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --color-bg: #0a0a0a;
+  --color-bg-panel: #141414;
+  --color-bg-panel-2: #1a1a1a;
+  --color-line: #2a2a2a;
+  --color-line-2: #3a3a3a;
+  --color-ink: #ffffff;
+  --color-ink-muted: #9a9a9a;
+  --color-brand: #d4d4d4;
+  --color-brand-2: #b0b0b0;
+  --color-danger: #ff4d6d;
+  --color-warning: #e5e5e5;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-ink);
+  background: #0a0a0a;
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.display-font {
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.glass {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+}
+
+.grid-noise {
+  background: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
