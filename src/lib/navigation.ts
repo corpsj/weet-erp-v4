@@ -4,6 +4,7 @@ import {
   ClipboardList,
   FolderKanban,
   Home,
+  ImagePlus,
   Landmark,
   Lock,
   Receipt,
@@ -54,6 +55,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "보안",
     items: [{ key: "vault", label: "계정 공유", href: "/vault", icon: Lock }],
+  },
+  {
+    label: "도구",
+    items: [{ key: "ai_images", label: "AI 이미지", href: "/ai-images", icon: ImagePlus }],
   },
   {
     label: "견적",
