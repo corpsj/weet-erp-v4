@@ -39,7 +39,7 @@ export function TopBar({ collapsed, onToggleSidebar, onOpenMobileMenu }: TopBarP
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9a9a9a]" />
         <Input 
           className="pl-9 h-8 bg-[#141414] border-[#2a2a2a] text-[#ffffff] placeholder:text-[#9a9a9a] focus-visible:ring-1 focus-visible:ring-[#d4d4d4] focus-visible:ring-offset-0" 
-          placeholder="통합 검색 (Phase 2)" 
+          placeholder="통합 검색" 
         />
       </div>
 

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchApi } from "@/lib/api/client";
 import type { UnreadMenuCount } from "@/types/api";
 
+export * from "@/lib/api/hooks/ai-images";
 export * from "@/lib/api/hooks/calendar";
 export * from "@/lib/api/hooks/bank-transactions";
 export * from "@/lib/api/hooks/expenses";

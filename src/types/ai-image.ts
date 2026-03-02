@@ -71,3 +71,19 @@ export type GeneratedImage = {
   mode: "generate" | "edit";
   createdAt: string;
 };
+
+export type SavedGeneratedImage = {
+  id: string;
+  prompt: string;
+  filePath: string;
+  signedUrl: string | null;
+  textContent: string | null;
+  model: ImageModel;
+  aspectRatio: AspectRatio;
+  imageSize: ImageSize;
+  mode: "generate" | "edit";
+  isStarred: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};

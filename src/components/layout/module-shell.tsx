@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 
 type ModuleShellProps = {
@@ -7,7 +6,6 @@ type ModuleShellProps = {
   description: string;
   breadcrumb: Array<{ label: string; href?: string }>;
   children?: ReactNode;
-  status?: "ready" | "soon";
 };
 
 export function ModuleShell({
@@ -15,18 +13,11 @@ export function ModuleShell({
   description,
   breadcrumb,
   children,
-  status = "ready",
 }: ModuleShellProps) {
   return (
     <section className="animate-[fade-up_300ms_ease-out] w-full max-w-7xl mx-auto py-6 sm:py-8 px-4 sm:px-6">
       <PageHeader title={title} description={description} breadcrumb={breadcrumb} />
       <div className="rounded-xl border border-[#2a2a2a] bg-[#141414] shadow-sm">
-        <div className="flex items-center justify-between border-b border-[#2a2a2a] px-6 py-4 bg-[#1a1a1a] rounded-t-xl">
-          <p className="text-xs font-medium tracking-wide text-[#9a9a9a] uppercase">Phase 1 기반 화면</p>
-          <Badge tone={status === "soon" ? "warning" : "brand"}>
-            {status === "soon" ? "출시 예정" : "기반 완료"}
-          </Badge>
-        </div>
         <div className="p-6">
           {children ?? (
             <p className="text-sm leading-relaxed text-[#9a9a9a]">
