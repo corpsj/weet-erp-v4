@@ -16,6 +16,7 @@ export * from "@/lib/api/hooks/utilities";
 export * from "@/lib/api/hooks/users";
 export * from "@/lib/api/hooks/settings";
 export * from "@/lib/api/hooks/vault";
+export * from "@/lib/api/hooks/marketing";
 
 export function useUnreadMenuCounts() {
   return useQuery({
