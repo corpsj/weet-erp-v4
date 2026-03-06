@@ -47,6 +47,20 @@ export async function POST(request: Request, context: RouteContext) {
 
     const { id } = await context.params;
 
+    const { data: proposal, error: proposalError } = await supabase
+      .from("marketing_proposals")
+      .select("status")
+      .eq("id", id)
+      .single();
+
+    if (proposalError) {
+      throw proposalError;
+    }
+
+    if (proposal.status !== "pending") {
+      throw new ApiError("VALIDATION_ERROR", "대기 중인 제안만 승인할 수 있습니다.");
+    }
+
     const { data, error } = await supabase
       .from("marketing_proposals")
       .update({

@@ -8,6 +8,7 @@ import type {
   MarketingProposal,
   MarketingContent,
   MarketSignal,
+  DailyMetric,
   SystemStatus,
   LeadFilters,
 } from "@/types/marketing";
@@ -65,6 +66,14 @@ export function useMarketingSignals() {
     queryKey: ["marketing", "signals"],
     queryFn: () => fetchApi<MarketSignal[]>("/api/marketing/signals"),
     staleTime: 1000 * 60,
+  });
+}
+
+export function useMarketingDailyMetrics() {
+  return useQuery({
+    queryKey: ["marketing", "daily-metrics"],
+    queryFn: () => fetchApi<DailyMetric[]>("/api/marketing/daily-metrics"),
+    staleTime: 1000 * 60 * 5,
   });
 }
 

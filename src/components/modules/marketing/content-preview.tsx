@@ -3,9 +3,10 @@ import { BookOpen, Camera, Coffee, Video, Carrot, MessageCircle, FileText } from
 import { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { MarketingContent } from '@/types/marketing';
+import { formatDate } from '@/lib/utils/format';
+import { CONTENT_STATUS_LABELS, type MarketingContent } from '@/types/marketing';
 
-export type Content = Pick<MarketingContent, 'id' | 'channel' | 'title' | 'body' | 'status' | 'createdAt'>;
+export type Content = Pick<MarketingContent, 'id' | 'channel' | 'title' | 'body' | 'status' | 'createdAt' | 'engagementMetrics' | 'publishedAt'>;
 
 interface ContentPreviewProps {
   content: Content;
@@ -36,13 +37,28 @@ export function ContentPreview({ content }: ContentPreviewProps) {
     minute: '2-digit',
   });
 
+  const views = typeof content.engagementMetrics?.views === 'number' ? content.engagementMetrics.views : null;
+  const clicks = typeof content.engagementMetrics?.clicks === 'number' ? content.engagementMetrics.clicks : null;
+  const engagementRate =
+    typeof content.engagementMetrics?.engagementRate === 'number'
+      ? content.engagementMetrics.engagementRate
+      : null;
+
+  const hasMetrics = views !== null || clicks !== null || engagementRate !== null;
+  const displayRate =
+    engagementRate === null
+      ? null
+      : engagementRate <= 1
+        ? Math.round(engagementRate * 100)
+        : Math.round(engagementRate);
+
   return (
     <Card>
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-2 items-center">
           <ChannelIcon className="h-5 w-5 text-[#9a9a9a]" />
           <Badge tone="neutral">{content.channel}</Badge>
-          <Badge tone={statusTone(content.status)}>{content.status}</Badge>
+          <Badge tone={statusTone(content.status)}>{CONTENT_STATUS_LABELS[content.status] || content.status}</Badge>
         </div>
         <span className="text-xs text-[#9a9a9a] font-mono">{formattedDate}</span>
       </div>
@@ -54,6 +70,16 @@ export function ContentPreview({ content }: ContentPreviewProps) {
           {content.body}
         </p>
       </div>
+
+      {content.publishedAt && (
+        <p className="text-xs text-[#9a9a9a] mt-3">발행일: {formatDate(content.publishedAt)}</p>
+      )}
+
+      {hasMetrics && (
+        <p className="text-xs text-[#9a9a9a] mt-2">
+          조회 {views ?? 0} · 클릭 {clicks ?? 0} · 참여율 {displayRate ?? 0}%
+        </p>
+      )}
     </Card>
   );
 }

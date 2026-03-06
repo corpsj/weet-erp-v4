@@ -15,7 +15,7 @@ type ProposalRow = {
 };
 
 type RejectBody = {
-  reason: string;
+  reason?: string;
 };
 
 type RouteContext = {
@@ -48,17 +48,29 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const { reason } = (await request.json()) as RejectBody;
-    if (!reason || !reason.trim()) {
-      throw new ApiError("VALIDATION_ERROR", "반려 사유를 입력해주세요.");
-    }
+    const rejectionReason = reason?.trim() || "관리자 거부";
 
     const { id } = await context.params;
+
+    const { data: proposal, error: proposalError } = await supabase
+      .from("marketing_proposals")
+      .select("status")
+      .eq("id", id)
+      .single();
+
+    if (proposalError) {
+      throw proposalError;
+    }
+
+    if (proposal.status !== "pending") {
+      throw new ApiError("VALIDATION_ERROR", "대기 중인 제안만 거부할 수 있습니다.");
+    }
 
     const { data, error } = await supabase
       .from("marketing_proposals")
       .update({
         status: "rejected",
-        rejection_reason: reason,
+        rejection_reason: rejectionReason,
       })
       .eq("id", id)
       .select()

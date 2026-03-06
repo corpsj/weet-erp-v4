@@ -20,6 +20,15 @@ export type MarketingLead = {
   updatedAt: string;
 };
 
+export const JOURNEY_STAGE_LABELS: Record<string, string> = {
+  awareness: "인지",
+  interest: "관심",
+  consideration: "고려",
+  decision: "결정",
+  conversion: "전환",
+  retention: "유지",
+};
+
 export type MarketingProposal = {
   id: string;
   signalId: string | null;
@@ -75,10 +84,34 @@ export type DailyMetric = {
   createdAt: string;
 };
 
+export type DailyMetricsResponse = {
+  metrics: DailyMetric[];
+  summary: {
+    totalLeads: number;
+    totalProposals: number;
+    totalApproved: number;
+    totalPublished: number;
+  };
+};
+
 export type MarketingSetting = {
   key: string;
-  value: string | null;
+  value: unknown;
   updatedAt: string;
+};
+
+export const CONTENT_STATUS_LABELS: Record<string, string> = {
+  draft: "초안",
+  review: "검토 중",
+  approved: "승인",
+  published: "발행됨",
+  archived: "보관",
+};
+
+export const PROPOSAL_STATUS_LABELS: Record<string, string> = {
+  pending: "대기중",
+  approved: "승인됨",
+  rejected: "거부됨",
 };
 
 // ============================================================================
@@ -90,6 +123,17 @@ export type MarketingOverview = {
   pendingProposals: number;
   publishedContent: number;
   channelStats: Record<string, number>;
+  trends: {
+    leadsChange: number;
+    proposalsChange: number;
+    contentChange: number;
+  };
+  recentActivity: Array<{
+    id: string;
+    type: "lead_created" | "proposal_approved" | "proposal_rejected" | "content_published";
+    title: string;
+    createdAt: string;
+  }>;
 };
 
 export type SystemStatus = {

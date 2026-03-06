@@ -6,6 +6,27 @@ type LeadPlatformRow = {
   platform: string;
 };
 
+type LeadActivityRow = {
+  id: string;
+  action_type: string | null;
+  details: Record<string, unknown> | null;
+  performed_at: string;
+};
+
+type ProposalActivityRow = {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+};
+
+type ContentActivityRow = {
+  id: string;
+  title: string | null;
+  published_at: string | null;
+  created_at: string;
+};
+
 export async function GET(request: Request) {
   try {
     void request;
@@ -19,11 +40,52 @@ export async function GET(request: Request) {
       throw new ApiError("UNAUTHORIZED", "로그인이 필요합니다.");
     }
 
-    const [{ count: totalLeads, error: leadsCountError }, { count: pendingProposals, error: proposalsCountError }, { count: publishedContent, error: contentCountError }, { data: leadPlatforms, error: leadPlatformsError }] = await Promise.all([
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { count: totalLeads, error: leadsCountError },
+      { count: pendingProposals, error: proposalsCountError },
+      { count: publishedContent, error: contentCountError },
+      { data: leadPlatforms, error: leadPlatformsError },
+      { count: leadsChange, error: leadsChangeError },
+      { count: proposalsChange, error: proposalsChangeError },
+      { count: contentChange, error: contentChangeError },
+      { data: leadActivities, error: leadActivitiesError },
+      { data: proposalActivities, error: proposalActivitiesError },
+      { data: contentActivities, error: contentActivitiesError },
+    ] = await Promise.all([
       supabase.from("marketing_leads").select("id", { count: "exact", head: true }),
       supabase.from("marketing_proposals").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("marketing_contents").select("id", { count: "exact", head: true }).eq("status", "published"),
       supabase.from("marketing_leads").select("platform"),
+      supabase.from("marketing_leads").select("id", { count: "exact", head: true }).gt("created_at", sevenDaysAgo),
+      supabase
+        .from("marketing_proposals")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending")
+        .gt("created_at", sevenDaysAgo),
+      supabase
+        .from("marketing_contents")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "published")
+        .gt("created_at", sevenDaysAgo),
+      supabase
+        .from("marketing_lead_actions")
+        .select("id, action_type, details, performed_at")
+        .order("performed_at", { ascending: false })
+        .limit(2),
+      supabase
+        .from("marketing_proposals")
+        .select("id, title, status, created_at")
+        .in("status", ["approved", "rejected"])
+        .order("created_at", { ascending: false })
+        .limit(2),
+      supabase
+        .from("marketing_contents")
+        .select("id, title, published_at, created_at")
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .limit(1),
     ]);
 
     if (leadsCountError) {
@@ -42,17 +104,72 @@ export async function GET(request: Request) {
       throw leadPlatformsError;
     }
 
+    if (leadsChangeError) {
+      throw leadsChangeError;
+    }
+
+    if (proposalsChangeError) {
+      throw proposalsChangeError;
+    }
+
+    if (contentChangeError) {
+      throw contentChangeError;
+    }
+
+    if (leadActivitiesError) {
+      throw leadActivitiesError;
+    }
+
+    if (proposalActivitiesError) {
+      throw proposalActivitiesError;
+    }
+
+    if (contentActivitiesError) {
+      throw contentActivitiesError;
+    }
+
     const channelStats = ((leadPlatforms ?? []) as LeadPlatformRow[]).reduce<Record<string, number>>((acc, lead) => {
       const key = lead.platform;
       acc[key] = (acc[key] ?? 0) + 1;
       return acc;
     }, {});
 
+    const recentActivity = [
+      ...((leadActivities ?? []) as LeadActivityRow[]).map((activity) => ({
+        id: activity.id,
+        type: "lead_created" as const,
+        title: typeof activity.details?.title === "string"
+          ? activity.details.title
+          : activity.action_type ?? "리드 활동 발생",
+        createdAt: activity.performed_at,
+      })),
+      ...((proposalActivities ?? []) as ProposalActivityRow[]).map((proposal) => ({
+        id: proposal.id,
+        type: proposal.status === "approved" ? ("proposal_approved" as const) : ("proposal_rejected" as const),
+        title: proposal.title,
+        createdAt: proposal.created_at,
+      })),
+      ...((contentActivities ?? []) as ContentActivityRow[]).map((content) => ({
+        id: content.id,
+        type: "content_published" as const,
+        title: content.title ?? "제목 없는 콘텐츠",
+        createdAt: content.published_at ?? content.created_at,
+      })),
+    ]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
     const overview: MarketingOverview = {
       totalLeads: totalLeads ?? 0,
       pendingProposals: pendingProposals ?? 0,
       publishedContent: publishedContent ?? 0,
       channelStats,
+      trends: {
+        leadsChange: leadsChange ?? 0,
+        proposalsChange: proposalsChange ?? 0,
+        contentChange: contentChange ?? 0,
+      },
+      recentActivity,
     };
 
     return ok(overview);

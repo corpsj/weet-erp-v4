@@ -3,7 +3,7 @@
 import React from 'react';
 import { Table, THead, TBody, TH, TD, TR, TableEmpty } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import type { MarketingLead } from '@/types/marketing';
+import { JOURNEY_STAGE_LABELS, type MarketingLead } from '@/types/marketing';
 
 export type Lead = Pick<MarketingLead, 'id' | 'username' | 'platform' | 'score' | 'personaType' | 'journeyStage'>;
 
@@ -11,7 +11,7 @@ interface LeadTableProps {
   leads: Lead[];
 }
 
-const stages = ['awareness', 'interest', 'explore', 'compare', 'hesitate', 'decide', 'contract'];
+const stages = Object.keys(JOURNEY_STAGE_LABELS);
 
 function scoreTone(score: number): 'brand' | 'warning' | 'neutral' {
   if (score >= 8) return 'brand';
@@ -57,7 +57,7 @@ export function LeadTable({ leads }: LeadTableProps) {
                       />
                     </div>
                     <span className="text-xs text-[#9a9a9a] w-16 truncate" title={lead.journeyStage}>
-                      {lead.journeyStage}
+                      {JOURNEY_STAGE_LABELS[lead.journeyStage] || lead.journeyStage}
                     </span>
                   </div>
                 </TD>

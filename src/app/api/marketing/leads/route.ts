@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
     const scoreMin = searchParams.get("score_min");
     const persona = searchParams.get("persona");
     const stage = searchParams.get("stage");
+    const search = searchParams.get("search");
+    const sort = searchParams.get("sort");
 
     let query = supabase.from("marketing_leads").select("*");
 
@@ -59,6 +61,18 @@ export async function GET(request: NextRequest) {
 
     if (stage) {
       query = query.eq("journey_stage", stage);
+    }
+
+    if (search) {
+      query = query.or(`username.ilike.%${search}%,platform.ilike.%${search}%`);
+    }
+
+    if (sort === "score_asc") {
+      query = query.order("score", { ascending: true });
+    } else if (sort === "created_at_desc") {
+      query = query.order("created_at", { ascending: false });
+    } else {
+      query = query.order("score", { ascending: false });
     }
 
     const { data, error } = await query;
