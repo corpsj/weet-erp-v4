@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
-import { Settings } from "lucide-react";
+import { ArrowLeft, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { NAV_GROUPS } from "@/lib/navigation";
+import { NAV_GROUPS, MARKETING_NAV_GROUPS } from "@/lib/navigation";
 import { useUnreadMenuCounts } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,6 +18,7 @@ type SidebarProps = {
 
 export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps) {
   const pathname = usePathname();
+  const isMarketing = pathname.startsWith("/marketing");
   const { data } = useUnreadMenuCounts();
 
   const unreadMap = useMemo(() => {
@@ -27,6 +28,8 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
     });
     return map;
   }, [data]);
+
+  const navGroups = isMarketing ? MARKETING_NAV_GROUPS : NAV_GROUPS;
 
   return (
     <motion.aside
@@ -48,15 +51,19 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
               transition={{ duration: 0.2 }}
               className="whitespace-nowrap overflow-hidden"
             >
-              <p className="display-font text-lg font-semibold leading-none">ERP v4</p>
-              <p className="text-xs text-[#9a9a9a] mt-1 leading-none">Grok UX</p>
+              <p className="display-font text-lg font-semibold leading-none">
+                {isMarketing ? "WEET Director" : "ERP v4"}
+              </p>
+              <p className="text-xs text-[#9a9a9a] mt-1 leading-none">
+                {isMarketing ? "AI Marketing" : "Grok UX"}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
       <div className="space-y-4 overflow-y-auto pb-4 overflow-x-hidden">
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label} className="flex flex-col">
             <AnimatePresence initial={false}>
               {!collapsed ? (
@@ -76,7 +83,7 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
-                const unread = unreadMap.get(item.key) ?? 0;
+                const unread = isMarketing ? 0 : (unreadMap.get(item.key) ?? 0);
 
                 return (
                   <li key={item.key}>
@@ -123,24 +130,45 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
       </div>
 
       <div className="mt-auto shrink-0 space-y-2 border-t border-[#2a2a2a] pt-4 overflow-hidden">
-        <Link
-          href="/settings"
-          className="flex h-9 items-center rounded-lg px-2 text-sm text-[#9a9a9a] transition-colors hover:bg-[#141414] hover:text-[#ffffff] border-l-2 border-transparent"
-        >
-          <Settings className="h-5 w-5 shrink-0" />
-          <AnimatePresence initial={false}>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="ml-3 whitespace-nowrap overflow-hidden"
-              >
-                설정
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </Link>
+        {isMarketing ? (
+          <Link
+            href="/hub"
+            className="flex h-9 items-center rounded-lg px-2 text-sm text-[#9a9a9a] transition-colors hover:bg-[#141414] hover:text-[#ffffff] border-l-2 border-transparent"
+          >
+            <ArrowLeft className="h-5 w-5 shrink-0" />
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="ml-3 whitespace-nowrap overflow-hidden"
+                >
+                  ERP로 돌아가기
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+        ) : (
+          <Link
+            href="/settings"
+            className="flex h-9 items-center rounded-lg px-2 text-sm text-[#9a9a9a] transition-colors hover:bg-[#141414] hover:text-[#ffffff] border-l-2 border-transparent"
+          >
+            <Settings className="h-5 w-5 shrink-0" />
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="ml-3 whitespace-nowrap overflow-hidden"
+                >
+                  설정
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+        )}
 
         <div className="flex h-12 items-center rounded-xl border border-[#2a2a2a] bg-[#141414] px-2 py-2">
           <div className="h-8 w-8 shrink-0 rounded-full bg-[#1a1a1a] border border-[#3a3a3a]" />

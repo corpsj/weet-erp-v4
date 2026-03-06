@@ -2,15 +2,20 @@ import {
   Banknote,
   CalendarDays,
   ClipboardList,
+  FileText,
   FolderKanban,
   Home,
   ImagePlus,
   Landmark,
+  LayoutDashboard,
+  Lightbulb,
   Lock,
+  Radio,
   Receipt,
   ScrollText,
   Settings,
   StickyNote,
+  Users,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -63,6 +68,20 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "견적",
     items: [{ key: "estimates", label: "견적 시스템", href: "/estimates", icon: FolderKanban, disabled: true }],
+  },
+];
+
+export const MARKETING_NAV_GROUPS: NavGroup[] = [
+  {
+    label: "마케팅",
+    items: [
+      { key: "marketing-overview", label: "개요", href: "/marketing", icon: LayoutDashboard },
+      { key: "marketing-leads", label: "리드", href: "/marketing/leads", icon: Users },
+      { key: "marketing-proposals", label: "제안", href: "/marketing/proposals", icon: Lightbulb },
+      { key: "marketing-content", label: "콘텐츠", href: "/marketing/content", icon: FileText },
+      { key: "marketing-signals", label: "신호", href: "/marketing/signals", icon: Radio },
+      { key: "marketing-system", label: "시스템", href: "/marketing/system", icon: Settings },
+    ],
   },
 ];
 
