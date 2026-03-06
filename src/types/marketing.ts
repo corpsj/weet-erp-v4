@@ -93,9 +93,9 @@ export type MarketingOverview = {
 };
 
 export type SystemStatus = {
-  scheduler: string;
-  ollama: string;
-  naverQuota: number;
+  scheduler: { running: boolean; lastRun: string | null; nextRun: string | null };
+  ollama: { connected: boolean; model: string };
+  naverQuota: { used: number; limit: number; resetAt: string | null };
 };
 
 export type SystemStatusResponse = {
