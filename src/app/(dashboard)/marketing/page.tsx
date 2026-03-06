@@ -33,7 +33,7 @@ export default function MarketingOverviewPage() {
     );
   }
 
-  const recentLeads = leads?.slice(0, 3) || [];
+  const recentLeads = leads?.slice(0, 5) || [];
   const recentProposals = proposals?.slice(0, 3) || [];
   const activeChannels = Object.keys(overview?.channelStats || {}).length;
 

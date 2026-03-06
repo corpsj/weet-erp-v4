@@ -83,8 +83,10 @@ export function useApproveProposal() {
       fetchApi<MarketingProposal>(`/api/marketing/proposals/${id}/approve`, {
         method: "POST",
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["marketing", "proposals"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["marketing", "overview"] });
+    },
   });
 }
 
@@ -96,7 +98,9 @@ export function useRejectProposal() {
         method: "POST",
         body: JSON.stringify({ reason }),
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["marketing", "proposals"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["marketing", "overview"] });
+    },
   });
 }

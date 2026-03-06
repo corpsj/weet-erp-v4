@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   Lock,
+  Megaphone,
   Radio,
   Receipt,
   ScrollText,
@@ -68,6 +69,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "견적",
     items: [{ key: "estimates", label: "견적 시스템", href: "/estimates", icon: FolderKanban, disabled: true }],
+  },
+  {
+    label: "마케팅",
+    items: [
+      { key: "marketing", label: "마케팅", href: "/marketing", icon: Megaphone },
+    ],
   },
 ];
 

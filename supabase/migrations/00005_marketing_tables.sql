@@ -77,7 +77,7 @@ create table if not exists public.marketing_daily_metrics (
 -- 7. marketing_settings (text PK, not UUID)
 create table if not exists public.marketing_settings (
   key text primary key,
-  value text,
+  value jsonb,
   updated_at timestamptz not null default now()
 );
 
