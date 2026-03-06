@@ -2,21 +2,34 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { ModuleShell } from "@/components/layout/module-shell";
 import { useMarketingProposals, useApproveProposal, useRejectProposal } from "@/lib/api/hooks/marketing";
 import { ProposalCard } from "@/components/modules/marketing/proposal-card";
 import { Modal } from "@/components/ui/modal";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { PROPOSAL_STATUS_LABELS } from "@/types/marketing";
 
 const FILTER_TABS = [
   { id: "all", label: "전체" },
-  { id: "pending", label: "대기중" },
-  { id: "approved", label: "승인됨" },
-  { id: "rejected", label: "거부됨" },
+  ...Object.entries(PROPOSAL_STATUS_LABELS).map(([id, label]) => ({ id, label })),
 ];
 
 export default function ProposalsPage() {
+  return (
+    <ModuleShell
+      title="작업 제안"
+      description="AI가 생성한 마케팅 액션 제안을 검토하세요."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "제안" }]}
+    >
+      <ProposalsContent />
+    </ModuleShell>
+  );
+}
+
+function ProposalsContent() {
   const [filter, setFilter] = useState("all");
+  const [pendingApproveId, setPendingApproveId] = useState<string | null>(null);
+  const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; proposalId: string | null; reason: string }>({
     open: false,
     proposalId: null,
@@ -30,9 +43,17 @@ export default function ProposalsPage() {
   const filtered = (proposals ?? []).filter((p) => filter === "all" || p.status === filter);
 
   function handleApprove(id: string) {
+    if (pendingApproveId) return;
+    setPendingApproveId(id);
     approveProposal.mutate(id, {
-      onSuccess: () => toast.success("제안이 승인되었습니다."),
-      onError: () => toast.error("승인 처리 중 오류가 발생했습니다."),
+      onSuccess: () => {
+        toast.success("제안이 승인되었습니다.");
+        setPendingApproveId(null);
+      },
+      onError: () => {
+        toast.error("승인 처리 중 오류가 발생했습니다.");
+        setPendingApproveId(null);
+      },
     });
   }
 
@@ -41,27 +62,27 @@ export default function ProposalsPage() {
   }
 
   function handleRejectConfirm() {
-    if (!rejectModal.proposalId) return;
+    if (!rejectModal.proposalId || pendingRejectId) return;
+    setPendingRejectId(rejectModal.proposalId);
     rejectProposal.mutate(
       { id: rejectModal.proposalId, reason: rejectModal.reason || "관리자 거부" },
       {
         onSuccess: () => {
           toast.success("제안이 거부되었습니다.");
+          setPendingRejectId(null);
           setRejectModal({ open: false, proposalId: null, reason: "" });
         },
-        onError: () => toast.error("거부 처리 중 오류가 발생했습니다."),
+        onError: () => {
+          toast.error("거부 처리 중 오류가 발생했습니다.");
+          setPendingRejectId(null);
+        },
       },
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[#ffffff] tracking-tight">작업 제안</h1>
-          <p className="text-[#9a9a9a] mt-1">AI가 생성한 마케팅 액션 제안을 검토하세요.</p>
-        </div>
-        <div className="flex bg-[#141414] rounded-md border border-[#2a2a2a] p-1">
+      <div className="flex bg-[#141414] rounded-md border border-[#2a2a2a] p-1 w-fit max-w-full overflow-x-auto">
           {FILTER_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -74,7 +95,6 @@ export default function ProposalsPage() {
               {tab.label}
             </button>
           ))}
-        </div>
       </div>
 
       {isLoading ? (
@@ -95,12 +115,16 @@ export default function ProposalsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filtered.map((proposal) => (
-            <ProposalCard
-              key={proposal.id}
-              proposal={proposal}
-              onApprove={handleApprove}
-              onReject={handleReject}
-            />
+            <div key={proposal.id} className="space-y-2">
+              <ProposalCard
+                proposal={proposal}
+                onApprove={handleApprove}
+                onReject={handleReject}
+              />
+              {(pendingApproveId === proposal.id || pendingRejectId === proposal.id) && (
+                <p className="text-xs text-[#9a9a9a]">처리 중입니다...</p>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -111,20 +135,28 @@ export default function ProposalsPage() {
         title="거부 사유 입력"
       >
         <div className="space-y-4">
-          <Input
+          <textarea
             placeholder="거부 사유를 입력하세요 (선택)"
             value={rejectModal.reason}
             onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
+            rows={3}
+            className="flex w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-3 py-2 text-sm text-[#ffffff] outline-none placeholder:text-[#9a9a9a] focus:border-[#3a3a3a] focus:ring-1 focus:ring-[#3a3a3a]"
           />
           <div className="flex gap-2 justify-end">
             <Button
               variant="ghost"
               size="sm"
+              disabled={pendingRejectId !== null}
               onClick={() => setRejectModal({ open: false, proposalId: null, reason: "" })}
             >
               취소
             </Button>
-            <Button variant="danger" size="sm" onClick={handleRejectConfirm}>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleRejectConfirm}
+              isLoading={pendingRejectId !== null}
+            >
               거부 확인
             </Button>
           </div>

@@ -1,34 +1,85 @@
 "use client";
 
-import { toast } from "sonner";
-import { useMarketingSignals } from "@/lib/api/hooks";
+import { useMemo, useState } from "react";
+import { useMarketingSignals } from "@/lib/api/hooks/marketing";
+import { ModuleShell } from "@/components/layout/module-shell";
 import { SignalTimeline, type Signal } from "@/components/modules/marketing/signal-timeline";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RefreshCw, TrendingUp, Flame } from "lucide-react";
 
-const TREND_KEYWORDS = ["AI 마케팅", "초개인화", "로컬 비즈니스", "자동화", "당근마켓 광고", "인스타그램 릴스", "B2B 영업"];
+const URGENCY_TABS = [
+  { id: undefined, label: "전체" },
+  { id: "critical", label: "긴급" },
+  { id: "high", label: "높음" },
+  { id: "medium", label: "보통" },
+  { id: "low", label: "낮음" },
+];
 
 export default function SignalsPage() {
+  return (
+    <ModuleShell
+      title="시장 신호"
+      description="Market Radar가 감지한 업계 동향과 신호입니다."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "신호" }]}
+    >
+      <SignalsContent />
+    </ModuleShell>
+  );
+}
+
+function SignalsContent() {
+  const [urgencyFilter, setUrgencyFilter] = useState<string | undefined>(undefined);
   const { data, isLoading } = useMarketingSignals();
 
   const signals = (data ?? []).filter(
     (s): s is Signal => s.title !== null && s.summary !== null,
   );
 
+  const filteredSignals = useMemo(
+    () =>
+      signals.filter((signal) => !urgencyFilter || signal.urgency === urgencyFilter),
+    [signals, urgencyFilter],
+  );
+
+  const trendKeywords = useMemo(() => {
+    const keywordCount: Record<string, number> = {};
+    signals.forEach((signal) => {
+      signal.keywords.forEach((keyword) => {
+        keywordCount[keyword] = (keywordCount[keyword] ?? 0) + 1;
+      });
+    });
+    return Object.entries(keywordCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([keyword]) => keyword);
+  }, [signals]);
+
+  const criticalCount = signals.filter((signal) => signal.urgency === "critical").length;
+  const highCount = signals.filter((signal) => signal.urgency === "high").length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#ffffff] tracking-tight">시장 신호</h1>
-          <p className="text-[#9a9a9a] mt-1">Market Radar가 감지한 업계 동향과 신호입니다.</p>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap gap-2 rounded-md border border-[#2a2a2a] bg-[#141414] p-1">
+          {URGENCY_TABS.map((tab) => (
+            <button
+              key={tab.label}
+              type="button"
+              onClick={() => setUrgencyFilter(tab.id)}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                urgencyFilter === tab.id
+                  ? "bg-[#1a1a1a] text-[#ffffff]"
+                  : "text-[#9a9a9a] hover:bg-[#141414]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-        <button
-          type="button"
-          className="px-4 py-2 bg-[#141414] border border-[#2a2a2a] text-[#d4d4d4] font-medium rounded-lg text-sm hover:bg-[#1a1a1a] flex items-center gap-2 transition-colors"
-          onClick={() => toast.info("이 기능은 준비 중입니다.")}
-        >
-          <RefreshCw className="w-4 h-4" /> 수동 수집
-        </button>
+        <Button variant="outline" size="sm" disabled className="opacity-50">
+          <RefreshCw className="mr-1 h-4 w-4" /> 수동 수집 (곧 출시)
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -47,7 +98,7 @@ export default function SignalsPage() {
               ))}
             </div>
           ) : (
-            <SignalTimeline signals={signals} />
+            <SignalTimeline signals={filteredSignals} />
           )}
         </div>
 
@@ -56,31 +107,36 @@ export default function SignalsPage() {
             <h2 className="text-lg font-bold text-[#ffffff] mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-[#9a9a9a]" /> 트렌드 키워드
             </h2>
-            <div className="flex flex-wrap gap-2">
-              {TREND_KEYWORDS.map((keyword, i) => (
-                <Badge
-                  key={keyword}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#1a1a1a] border border-[#2a2a2a] text-[#d4d4d4]"
-                >
-                  {i < 3 && <Flame className="w-3.5 h-3.5" />}
-                  {keyword}
-                </Badge>
-              ))}
-            </div>
+            {trendKeywords.length === 0 ? (
+              <p className="text-sm text-[#9a9a9a]">표시할 키워드가 없습니다.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {trendKeywords.map((keyword, i) => (
+                  <Badge
+                    key={keyword}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#1a1a1a] border border-[#2a2a2a] text-[#d4d4d4]"
+                  >
+                    {i < 3 && <Flame className="w-3.5 h-3.5" />}
+                    {keyword}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-6 space-y-3">
+            <h2 className="text-lg font-bold text-[#ffffff]">신호 분석 요약</h2>
+            <p className="text-sm text-[#9a9a9a] leading-relaxed">
+              총 {signals.length}건의 신호 · 긴급 {criticalCount}건 · 높음 {highCount}건
+            </p>
+            <Button variant="outline" size="sm" disabled className="w-full opacity-50">
+              상세 보고서 (곧 출시)
+            </Button>
           </div>
 
           <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-6">
-            <h2 className="text-lg font-bold text-[#ffffff] mb-2">신호 분석 요약</h2>
-            <p className="text-[#9a9a9a] text-sm mb-4 leading-relaxed">
-              최근 24시간 동안 &apos;AI 마케팅&apos; 관련 신호가 급증하고 있습니다. 특히 B2B SaaS 기업들의 자동화 솔루션 도입 문의가 늘고 있는 추세입니다.
-            </p>
-            <button
-              type="button"
-              className="w-full py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] text-[#d4d4d4] rounded-lg text-sm font-medium transition-colors border border-[#2a2a2a]"
-              onClick={() => toast.info("이 기능은 준비 중입니다.")}
-            >
-              상세 보고서 생성
-            </button>
+            <h2 className="mb-3 text-sm font-semibold text-[#ffffff]">필터 결과</h2>
+            <Badge tone="neutral">현재 {filteredSignals.length}건</Badge>
           </div>
         </div>
       </div>
