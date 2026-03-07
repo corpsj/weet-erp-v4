@@ -98,6 +98,11 @@ class WeetScheduler:
             id="evening_followup",
         )
         _ = self.scheduler.add_job(
+            self._job_proposal_execute,
+            CronTrigger(hour=14, minute=0, timezone="Asia/Seoul"),
+            id="proposal_execute",
+        )
+        _ = self.scheduler.add_job(
             self._job_weekly_report,
             CronTrigger(day_of_week="mon", hour=9, minute=0, timezone="Asia/Seoul"),
             id="weekly_report",
@@ -196,51 +201,149 @@ class WeetScheduler:
         sb = get_supabase()
         result = (
             sb.table("marketing_leads")
-            .select("id,username,score,status")
-            .in_("status", ["new", "contacted"])
+            .select("id,username,score,status,journey_stage,metadata,last_action_at")
+            .neq("status", "converted")
             .order("score", desc=True)
-            .limit(50)
+            .limit(100)
             .execute()
         )
         leads = result.data or []
         updated = 0
+
         for lead in leads:
             score = int(lead.get("score") or 0)
-            current = str(lead.get("status") or "new")
-            new_status = current
-            if score >= 20 and current == "new":
-                new_status = "hot"
-            elif score >= 30:
+            current_status = str(lead.get("status") or "new")
+            current_stage = str(lead.get("journey_stage") or "awareness")
+            meta = lead.get("metadata") or {}
+            encounters = int(meta.get("encounters") or 1)
+            sources = meta.get("sources") or []
+            source_count = len(sources) if isinstance(sources, list) else 0
+
+            new_status = current_status
+            new_stage = current_stage
+
+            # --- status transitions (score-based) ---
+            if score >= 30:
                 new_status = "super_hot"
-            if new_status != current:
-                sb.table("marketing_leads").update({"status": new_status}).eq(
+            elif score >= 20:
+                new_status = "hot"
+            elif score >= 8 and current_status == "new":
+                new_status = "contacted"
+
+            # --- journey_stage transitions (behavior-based) ---
+            if current_stage == "awareness":
+                if score >= 8 or encounters >= 2:
+                    new_stage = "interest"
+            elif current_stage == "interest":
+                if score >= 15 or (source_count >= 2 and encounters >= 3):
+                    new_stage = "explore"
+            elif current_stage == "explore":
+                by_comp = meta.get("by_competitor", {})
+                comp_count = len(by_comp) if isinstance(by_comp, dict) else 0
+                if comp_count >= 2 or score >= 22:
+                    new_stage = "compare"
+            elif current_stage == "compare":
+                if score >= 30:
+                    new_stage = "hesitate"
+            elif current_stage == "hesitate":
+                if score >= 35:
+                    new_stage = "decide"
+
+            changes: dict[str, str] = {}
+            if new_status != current_status:
+                changes["status"] = new_status
+            if new_stage != current_stage:
+                changes["journey_stage"] = new_stage
+
+            if changes:
+                sb.table("marketing_leads").update(changes).eq(
                     "id", lead["id"]
                 ).execute()
                 updated += 1
+
         logger.info("Journey check: %d leads updated out of %d", updated, len(leads))
 
     async def _run_content_generate_job(self) -> None:
         from app.content.generator import ContentGenerator
+        from collections import Counter
 
         gen = ContentGenerator()
-        for channel in ["naver_blog", "instagram"]:
+        sb = get_supabase()
+
+        topic, keywords = self._pick_content_topic(sb)
+
+        channels_config = [
+            ("naver_blog", lambda t, kw: gen.generate_blog_article(t, kw)),
+            ("instagram", lambda t, kw: gen.generate_instagram_caption(t)),
+            ("naver_cafe", lambda t, kw: gen.generate_cafe_post(t)),
+        ]
+
+        saved = 0
+        for channel, gen_fn in channels_config:
             try:
-                if channel == "naver_blog":
-                    result = await gen.generate_blog_article(
-                        topic="이동식주택 트렌드", keywords=["이동식주택", "모듈러주택"]
-                    )
-                else:
-                    result = await gen.generate_instagram_caption(
-                        topic="이동식주택 트렌드"
-                    )
-                if result:
-                    logger.info(
-                        "Content generated for %s: %s",
-                        channel,
-                        getattr(result, "title", "untitled"),
-                    )
+                result = await gen_fn(topic, keywords)
+                if not result:
+                    continue
+
+                title = getattr(result, "title", topic)
+                body = getattr(result, "body", "")
+                sb.table("marketing_contents").insert(
+                    {
+                        "channel": channel,
+                        "title": title,
+                        "body": body,
+                        "status": "draft",
+                        "metadata": {
+                            "topic": topic,
+                            "keywords": keywords,
+                            "generated_at": datetime.now(self._kst).isoformat(),
+                        },
+                    }
+                ).execute()
+                saved += 1
+                logger.info("Content generated for %s: %s", channel, title)
             except Exception as exc:
                 logger.warning("Content generation failed for %s: %s", channel, exc)
+
+        self._record_daily_metric("proposals_made", saved)
+
+    def _pick_content_topic(self, sb) -> tuple[str, list[str]]:
+        """Pick a topic from recent signals; fall back to evergreen topics."""
+        from collections import Counter
+
+        try:
+            result = (
+                sb.table("marketing_signals")
+                .select("keywords,title")
+                .order("created_at", desc=True)
+                .limit(30)
+                .execute()
+            )
+            rows = result.data or []
+        except Exception:
+            rows = []
+
+        if rows:
+            kw_counter: Counter[str] = Counter()
+            for row in rows:
+                kws = row.get("keywords") or []
+                if isinstance(kws, list):
+                    kw_counter.update(kws)
+            if kw_counter:
+                top_keywords = [kw for kw, _ in kw_counter.most_common(5)]
+                topic = top_keywords[0]
+                return topic, top_keywords[:3]
+
+        evergreen = [
+            ("이동식주택 실거주 후기", ["이동식주택", "전원생활", "모듈러주택"]),
+            ("모듈러주택 비용 비교", ["모듈러주택", "건축비용", "이동식주택"]),
+            ("귀촌 준비 체크리스트", ["귀촌", "전원주택", "세컨하우스"]),
+            ("농막 vs 이동식주택 차이", ["농막", "이동식주택", "컨테이너하우스"]),
+            ("소형주택 트렌드", ["소형주택", "미니멀하우스", "1인가구"]),
+        ]
+        import random
+
+        return random.choice(evergreen)
 
     async def _run_weekly_report_job(self) -> None:
         from app.core.discord_bot import DiscordBot
@@ -354,7 +457,7 @@ class WeetScheduler:
             sb = get_supabase()
             metric_date = datetime.now(self._kst).strftime("%Y-%m-%d")
             current_row = (
-                sb.table("daily_metrics")
+                sb.table("marketing_daily_metrics")
                 .select(metric_name)
                 .eq("date", metric_date)
                 .limit(1)
@@ -364,7 +467,7 @@ class WeetScheduler:
             if current_row.data:
                 current_value = int(current_row.data[0].get(metric_name, 0) or 0)
             payload = {"date": metric_date, metric_name: current_value + increment}
-            _ = sb.table("daily_metrics").upsert(payload).execute()
+            _ = sb.table("marketing_daily_metrics").upsert(payload).execute()
         except Exception as exc:
             logger.warning("Failed to write daily_metrics(%s): %s", metric_name, exc)
 
@@ -486,33 +589,114 @@ class WeetScheduler:
         bridge = OpenClawBridge()
         try:
             sb = get_supabase()
-            result = (
+
+            # Phase 1: Like posts of warm leads (score 8-19)
+            warm_result = (
                 sb.table("marketing_leads")
-                .select("id,username,source")
+                .select("id,username,score,metadata")
                 .eq("platform", "instagram")
-                .eq("status", "new")
-                .limit(20)
+                .gte("score", 8)
+                .order("score", desc=True)
+                .limit(15)
                 .execute()
             )
-            leads: list[dict[str, Any]] = result.data or []
-
-            engagement_count = 0
-            for lead_row in leads:
-                lead_id = lead_row.get("id")
-                username = str(lead_row.get("username", "") or "")
-                if not lead_id or not username:
+            warm_leads: list[dict[str, Any]] = warm_result.data or []
+            like_count = 0
+            for lead_row in warm_leads:
+                score = int(lead_row.get("score") or 0)
+                if score >= 20:
+                    continue
+                lead_id = str(lead_row.get("id") or "")
+                if not lead_id:
                     continue
                 try:
-                    _ = await self._execute_openclaw_call(
+                    await self._execute_openclaw_call(
                         "evening_followup",
-                        f"engage_follow:{username}",
-                        lambda lid=str(lead_id): bridge.engage_instagram_follow(lid),
+                        f"engage_like:{lead_row.get('username', '')}",
+                        lambda lid=lead_id: bridge.engage_instagram_like(lid),
                     )
-                    engagement_count += 1
+                    like_count += 1
                 except Exception as exc:
-                    logger.warning("Evening followup failed for %s: %s", username, exc)
+                    logger.warning(
+                        "Like engagement failed for %s: %s",
+                        lead_row.get("username"),
+                        exc,
+                    )
 
-            self._record_daily_metric("proposals_made", engagement_count)
+            # Phase 2: Follow hot leads (score >= 20)
+            hot_result = (
+                sb.table("marketing_leads")
+                .select("id,username,score,journey_stage,persona_type")
+                .eq("platform", "instagram")
+                .gte("score", 20)
+                .order("score", desc=True)
+                .limit(10)
+                .execute()
+            )
+            hot_leads: list[dict[str, Any]] = hot_result.data or []
+            follow_count = 0
+            for lead_row in hot_leads:
+                lead_id = str(lead_row.get("id") or "")
+                if not lead_id:
+                    continue
+                try:
+                    await self._execute_openclaw_call(
+                        "evening_followup",
+                        f"engage_follow:{lead_row.get('username', '')}",
+                        lambda lid=lead_id: bridge.engage_instagram_follow(lid),
+                    )
+                    follow_count += 1
+                except Exception as exc:
+                    logger.warning(
+                        "Follow engagement failed for %s: %s",
+                        lead_row.get("username"),
+                        exc,
+                    )
+
+            # Phase 3: DM super-hot leads (score >= 30) not DM'd in 48h
+            super_result = (
+                sb.table("marketing_leads")
+                .select("id,username,score,journey_stage,persona_type")
+                .eq("platform", "instagram")
+                .gte("score", 30)
+                .order("score", desc=True)
+                .limit(5)
+                .execute()
+            )
+            super_leads: list[dict[str, Any]] = super_result.data or []
+            dm_count = 0
+            for lead_row in super_leads:
+                lead_id = str(lead_row.get("id") or "")
+                username = str(lead_row.get("username") or "")
+                if not lead_id or not username:
+                    continue
+
+                persona = str(lead_row.get("persona_type") or "일반")
+                stage = str(lead_row.get("journey_stage") or "explore")
+                dm_msg = (
+                    f"안녕하세요 @{username}님! 이동식주택에 관심 가져주셔서 감사해요. "
+                    f"궁금한 점이 있으시면 편하게 DM 주세요 :)"
+                )
+                try:
+                    await self._execute_openclaw_call(
+                        "evening_followup",
+                        f"engage_dm:{username}",
+                        lambda lid=lead_id, msg=dm_msg: bridge.engage_instagram_dm(
+                            lid, msg
+                        ),
+                    )
+                    dm_count += 1
+                except Exception as exc:
+                    logger.warning("DM engagement failed for %s: %s", username, exc)
+
+            total = like_count + follow_count + dm_count
+            logger.info(
+                "Evening followup: %d likes, %d follows, %d DMs",
+                like_count,
+                follow_count,
+                dm_count,
+            )
+            self._record_daily_metric("proposals_made", total)
         finally:
             await bridge.close()
 
@@ -613,6 +797,133 @@ class WeetScheduler:
         await self._run_task("manual_lead_collect", self._run_lead_hunt_job)
         self._clear_manual_collect_flag()
         logger.info("Manual lead collection completed, flag cleared")
+
+    async def _job_proposal_execute(self) -> None:
+        await self._run_task("proposal_execute", self._run_proposal_execute_job)
+
+    async def _run_proposal_execute_job(self) -> None:
+        """Execute approved proposals: content→generate, outreach→engage."""
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_proposals")
+            .select("id,title,action_type,content_draft,status")
+            .eq("status", "approved")
+            .order("approved_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+        proposals = result.data or []
+        if not proposals:
+            logger.info("No approved proposals to execute")
+            return
+
+        from app.content.generator import ContentGenerator
+
+        gen = ContentGenerator()
+        executed = 0
+
+        for proposal in proposals:
+            pid = proposal.get("id")
+            action = str(proposal.get("action_type") or "content")
+            title = str(proposal.get("title") or "")
+            draft = str(proposal.get("content_draft") or "")
+
+            try:
+                if action == "content":
+                    await self._execute_content_proposal(sb, gen, proposal)
+                elif action == "outreach":
+                    await self._execute_outreach_proposal(sb, proposal)
+                else:
+                    logger.info(
+                        "Proposal %s has action_type=%s, marking executed", pid, action
+                    )
+
+                sb.table("marketing_proposals").update(
+                    {
+                        "status": "executed",
+                        "metadata": {
+                            "executed_at": datetime.now(self._kst).isoformat(),
+                            "execution_result": "success",
+                        },
+                    }
+                ).eq("id", pid).execute()
+                executed += 1
+            except Exception as exc:
+                logger.error("Failed to execute proposal %s: %s", pid, exc)
+                sb.table("marketing_proposals").update(
+                    {
+                        "status": "execution_failed",
+                        "metadata": {
+                            "executed_at": datetime.now(self._kst).isoformat(),
+                            "execution_error": str(exc)[:500],
+                        },
+                    }
+                ).eq("id", pid).execute()
+
+        self._record_daily_metric("proposals_approved", executed)
+        logger.info("Proposal execution: %d/%d executed", executed, len(proposals))
+
+    async def _execute_content_proposal(
+        self, sb, gen, proposal: dict[str, Any]
+    ) -> None:
+        title = str(proposal.get("title") or "")
+        draft = str(proposal.get("content_draft") or "")
+
+        if draft:
+            sb.table("marketing_contents").insert(
+                {
+                    "channel": "instagram",
+                    "title": title,
+                    "body": draft,
+                    "status": "draft",
+                    "metadata": {
+                        "source": "proposal",
+                        "proposal_id": proposal.get("id"),
+                        "generated_at": datetime.now(self._kst).isoformat(),
+                    },
+                }
+            ).execute()
+        else:
+            result = await gen.generate_instagram_caption(topic=title)
+            if result:
+                sb.table("marketing_contents").insert(
+                    {
+                        "channel": "instagram",
+                        "title": title,
+                        "body": result.body,
+                        "status": "draft",
+                        "metadata": {
+                            "source": "proposal_generated",
+                            "proposal_id": proposal.get("id"),
+                            "hashtags": result.hashtags,
+                            "generated_at": datetime.now(self._kst).isoformat(),
+                        },
+                    }
+                ).execute()
+
+    async def _execute_outreach_proposal(self, sb, proposal: dict[str, Any]) -> None:
+        bridge = OpenClawBridge()
+        try:
+            hot_leads = (
+                sb.table("marketing_leads")
+                .select("id,username")
+                .eq("platform", "instagram")
+                .gte("score", 20)
+                .order("score", desc=True)
+                .limit(5)
+                .execute()
+            )
+            leads = hot_leads.data or []
+            for lead in leads:
+                lid = str(lead.get("id") or "")
+                if lid:
+                    await self._execute_openclaw_call(
+                        "proposal_execute",
+                        f"outreach_follow:{lead.get('username', '')}",
+                        lambda l=lid: bridge.engage_instagram_follow(l),
+                    )
+        finally:
+            await bridge.close()
 
     async def _job_weekly_report(self) -> None:
         await self._run_task("weekly_report", self._run_weekly_report_job)

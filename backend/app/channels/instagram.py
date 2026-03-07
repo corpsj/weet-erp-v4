@@ -373,7 +373,7 @@ class InstagramChannel:
         return leads
 
     async def like_post(self, post_id: str) -> bool:
-        """Like a post with rate limit and delay check."""
+        """Like a post via instagrapi with rate limit, delay, and action block handling."""
         if not self._is_operating_hours():
             return False
         if self._is_in_cooldown():
@@ -382,12 +382,27 @@ class InstagramChannel:
         try:
             self.limit_tracker.record("likes")
         except RuntimeError:
-            return False  # limit exceeded
-        await asyncio.sleep(self._random_delay())
-        return True
+            return False
 
-    async def follow_user(self, user_id: str) -> bool:
-        """Follow a user with rate limit and delay check."""
+        client = await self._get_authenticated_client()
+        if client is None:
+            logger.warning("like_post: no authenticated client")
+            return False
+
+        await asyncio.sleep(self._random_delay())
+        try:
+            await self._run_sync(lambda: client.media_like(post_id))
+            return True
+        except Exception as exc:
+            exc_text = str(exc).lower()
+            if "action_block" in exc_text or "temporarily blocked" in exc_text:
+                self._handle_action_block()
+            else:
+                logger.error("like_post failed for %s: %s", post_id, exc)
+            return False
+
+    async def follow_user(self, username: str) -> bool:
+        """Follow a user via instagrapi. Accepts username, resolves to user_id internally."""
         if not self._is_operating_hours():
             return False
         if self._is_in_cooldown():
@@ -397,17 +412,67 @@ class InstagramChannel:
             self.limit_tracker.record("follows")
         except RuntimeError:
             return False
+
+        client = await self._get_authenticated_client()
+        if client is None:
+            logger.warning("follow_user: no authenticated client")
+            return False
+
         await asyncio.sleep(self._random_delay())
-        return True
+        try:
+            uid = await self._run_sync(lambda: client.user_id_from_username(username))
+            await self._run_sync(lambda: client.user_follow(uid))
+            return True
+        except Exception as exc:
+            exc_text = str(exc).lower()
+            if "action_block" in exc_text or "temporarily blocked" in exc_text:
+                self._handle_action_block()
+            else:
+                logger.error("follow_user failed for %s: %s", username, exc)
+            return False
 
     async def post_content(
-        self, caption: str, image_path: Optional[str] = None
+        self,
+        caption: str,
+        media_path: Optional[str] = None,
+        media_type: str = "photo",
     ) -> PostResult:
-        """Post content to Instagram."""
+        """Post photo or reel to Instagram via instagrapi.
+
+        Args:
+            caption: Post caption text.
+            media_path: Absolute path to image/video file.
+            media_type: "photo" or "reel".
+        """
         if not self._is_operating_hours():
             return PostResult(success=False, error="Outside operating hours")
-        # Real implementation would use instagrapi client
-        return PostResult(success=True, post_id="mock_post_id")
+        if self._is_in_cooldown():
+            return PostResult(success=False, error="In action block cooldown")
+        if not media_path:
+            return PostResult(success=False, error="media_path is required")
+
+        from pathlib import Path
+
+        path = Path(media_path)
+        if not path.exists():
+            return PostResult(success=False, error=f"File not found: {media_path}")
+
+        client = await self._get_authenticated_client()
+        if client is None:
+            return PostResult(success=False, error="No authenticated client")
+
+        try:
+            if media_type == "reel":
+                media = await self._run_sync(lambda: client.clip_upload(path, caption))
+            else:
+                media = await self._run_sync(lambda: client.photo_upload(path, caption))
+            return PostResult(success=True, post_id=str(media.pk))
+        except Exception as exc:
+            exc_text = str(exc).lower()
+            if "action_block" in exc_text or "temporarily blocked" in exc_text:
+                self._handle_action_block()
+            logger.error("post_content failed: %s", exc)
+            return PostResult(success=False, error=str(exc))
 
     async def save_lead_to_db(self, candidate: LeadCandidate) -> Optional[int]:
         """Save a lead with per-competitor engagement accumulation.

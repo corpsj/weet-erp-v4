@@ -16,6 +16,9 @@ class LLMService:
             api_key="lm-studio",
         )
         self.model = settings.lmstudio.model
+        # model_fast: same model for now; swap to a lighter model
+        # (e.g. qwen3.5-7b) when one is available on LMStudio.
+        self.model_fast = self.model
 
     def generate(
         self, prompt: str, model: Optional[str] = None, system: Optional[str] = None

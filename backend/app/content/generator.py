@@ -8,6 +8,7 @@ from app.core.prompts import CONTENT_GENERATION_PROMPT
 
 class LLMClient(Protocol):
     model: str
+    model_fast: str
 
     def generate(
         self,

@@ -174,18 +174,68 @@ async def test_content_publish_default_feed_fallback(scheduler):
 
 @pytest.mark.asyncio
 async def test_evening_followup_uses_engagement(scheduler):
-    """_run_evening_followup_job queries DB and calls engage_instagram_follow."""
+    """_run_evening_followup_job queries warm/hot/super_hot leads and engages."""
     mock_bridge = AsyncMock()
     mock_bridge.close = AsyncMock()
+    mock_bridge.engage_instagram_like = AsyncMock(
+        return_value={"success": True, "content": ""}
+    )
     mock_bridge.engage_instagram_follow = AsyncMock(
         return_value={"success": True, "content": ""}
     )
+    mock_bridge.engage_instagram_dm = AsyncMock(
+        return_value={"success": True, "content": ""}
+    )
+
+    mock_execute_result = MagicMock()
+
+    warm_result = MagicMock()
+    warm_result.data = [
+        {"id": 101, "username": "웜유저", "score": 12, "metadata": {}},
+    ]
+    hot_result = MagicMock()
+    hot_result.data = [
+        {
+            "id": 201,
+            "username": "핫유저",
+            "score": 25,
+            "journey_stage": "explore",
+            "persona_type": "귀촌",
+        },
+    ]
+    super_result = MagicMock()
+    super_result.data = [
+        {
+            "id": 301,
+            "username": "슈퍼핫",
+            "score": 35,
+            "journey_stage": "compare",
+            "persona_type": "세컨드",
+        },
+    ]
 
     mock_sb = MagicMock()
-    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
-        {"id": 101, "username": "귀촌유저1", "source": "competitor_comment"},
-        {"id": 102, "username": "귀촌유저2", "source": "hashtag"},
-    ]
+    call_count = {"n": 0}
+    original_table = mock_sb.table
+
+    def table_side_effect(name):
+        chain = MagicMock()
+        chain.select.return_value = chain
+        chain.eq.return_value = chain
+        chain.gte.return_value = chain
+        chain.order.return_value = chain
+        chain.limit.return_value = chain
+
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            chain.execute.return_value = warm_result
+        elif call_count["n"] == 2:
+            chain.execute.return_value = hot_result
+        else:
+            chain.execute.return_value = super_result
+        return chain
+
+    mock_sb.table.side_effect = table_side_effect
 
     with (
         patch("app.orchestrator.scheduler.OpenClawBridge", return_value=mock_bridge),
@@ -200,7 +250,7 @@ async def test_evening_followup_uses_engagement(scheduler):
     ):
         await scheduler._run_evening_followup_job()
 
-    mock_metric.assert_called_with("proposals_made", 2)
+    mock_metric.assert_called_with("proposals_made", 3)
 
 
 def test_manual_collect_job_registered():

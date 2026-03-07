@@ -60,9 +60,14 @@ async def test_like_outside_operating_hours(channel):
 @pytest.mark.asyncio
 async def test_like_within_limit(channel):
     """Like action succeeds within limit during operating hours."""
-    with patch.object(channel, "_is_operating_hours", return_value=True):
-        with patch("asyncio.sleep", return_value=None):
-            result = await channel.like_post("post123")
+    mock_client = MagicMock()
+    mock_client.media_like.return_value = True
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_client),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        result = await channel.like_post("post123")
     assert result is True
     assert channel.limit_tracker.counts["likes"] == 1
 
@@ -80,9 +85,15 @@ async def test_like_limit_exceeded(channel):
 @pytest.mark.asyncio
 async def test_follow_within_limit(channel):
     """Follow action succeeds within limit during operating hours."""
-    with patch.object(channel, "_is_operating_hours", return_value=True):
-        with patch("asyncio.sleep", return_value=None):
-            result = await channel.follow_user("user123")
+    mock_client = MagicMock()
+    mock_client.user_id_from_username.return_value = "12345"
+    mock_client.user_follow.return_value = True
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_client),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        result = await channel.follow_user("user123")
     assert result is True
     assert channel.limit_tracker.counts["follows"] == 1
 
@@ -105,12 +116,21 @@ def test_limit_reset(channel):
 
 
 @pytest.mark.asyncio
-async def test_post_content_during_hours(channel):
-    """Post content succeeds during operating hours."""
-    with patch.object(channel, "_is_operating_hours", return_value=True):
-        result = await channel.post_content("테스트 캡션", None)
+async def test_post_content_during_hours(channel, tmp_path):
+    """Post content succeeds during operating hours with a valid image file."""
+    img_file = tmp_path / "test.jpg"
+    img_file.write_bytes(b"\xff\xd8\xff\xe0")
+    mock_media = MagicMock()
+    mock_media.pk = 99887766
+    mock_client = MagicMock()
+    mock_client.photo_upload.return_value = mock_media
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_client),
+    ):
+        result = await channel.post_content("테스트 캡션", str(img_file))
     assert result.success is True
-    assert result.post_id is not None
+    assert result.post_id == "99887766"
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,18 @@
 """Market Radar — scans multiple channels for market signals relevant to WEET."""
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from typing import Optional
 from app.clients.naver import NaverClient
 from app.clients.youtube import YouTubeClient
+from app.core.llm import LLMService
 from app.core.discord_bot import DiscordBot
 from app.db.session import get_supabase
+
+logger = logging.getLogger(__name__)
 
 # WEET 마케팅 키워드 세트
 DEMAND_KEYWORDS = [
@@ -44,6 +49,7 @@ class MarketRadar:
         self.naver = NaverClient()
         self.youtube = YouTubeClient()
         self.discord = DiscordBot()
+        self._llm: Optional[LLMService] = None
 
     async def scan_news(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan Naver news for policy changes, subsidies, trends."""
@@ -165,9 +171,24 @@ class MarketRadar:
 
     async def _save_signals(self, signals: list[Signal]):
         """Save signals to Supabase via REST API."""
+        deduplicated = self._deduplicate(signals)
+        removed_duplicates = len(signals) - len(deduplicated)
+        filtered_by_relevance = 0
+
         try:
             sb = get_supabase()
-            for signal in signals:
+        except Exception:
+            logger.exception("Failed to get Supabase client for radar signal save")
+            return
+
+        saved_count = 0
+        for signal in deduplicated:
+            relevance_score = self._assess_relevance(signal)
+            if relevance_score < 0.5:
+                filtered_by_relevance += 1
+                continue
+
+            try:
                 sb.table("marketing_signals").insert(
                     {
                         "source": signal.source,
@@ -180,5 +201,77 @@ class MarketRadar:
                         "url": signal.url[:1000] if signal.url else "",
                     }
                 ).execute()
+                saved_count += 1
+            except Exception:
+                logger.exception("Failed to save radar signal: %s", signal.title)
+
+        logger.info(
+            "Radar signal save complete: %s deduplicated, %s relevance-filtered, %s saved",
+            removed_duplicates,
+            filtered_by_relevance,
+            saved_count,
+        )
+
+    def _deduplicate(self, signals: list[Signal]) -> list[Signal]:
+        deduplicated: list[Signal] = []
+        seen_urls: set[str] = set()
+
+        for signal in signals:
+            normalized_url = (signal.url or "").strip()
+            if normalized_url:
+                if normalized_url in seen_urls:
+                    continue
+                seen_urls.add(normalized_url)
+
+            normalized_title = (signal.title or "").strip().lower()
+            if normalized_title:
+                is_near_duplicate = False
+                for kept in deduplicated:
+                    kept_title = (kept.title or "").strip().lower()
+                    if not kept_title:
+                        continue
+                    if (
+                        SequenceMatcher(None, normalized_title, kept_title).ratio()
+                        > 0.8
+                    ):
+                        is_near_duplicate = True
+                        break
+                if is_near_duplicate:
+                    continue
+
+            deduplicated.append(signal)
+
+        return deduplicated
+
+    def _assess_relevance(self, signal: Signal) -> float:
+        valid_urgency = {"critical", "high", "medium", "low"}
+        valid_sentiment = {"positive", "negative", "neutral"}
+
+        try:
+            if self._llm is None:
+                self._llm = LLMService()
+
+            text = f"제목: {signal.title}\n요약: {signal.summary}"
+            task = (
+                "이 시장 신호가 이동식주택/모듈러주택 사업에 얼마나 관련이 있는가? "
+                "JSON 형식으로만 응답: "
+                '{"urgency":"critical|high|medium|low","sentiment":"positive|negative|neutral",'
+                '"relevance_score":0.0-1.0,"reason":"..."}'
+            )
+            result = self._llm.analyze(text, task)
+
+            if not isinstance(result, dict) or result.get("error"):
+                raise ValueError(f"Invalid LLM response: {result}")
+
+            urgency = str(result.get("urgency", "")).strip().lower()
+            sentiment = str(result.get("sentiment", "")).strip().lower()
+            signal.urgency = urgency if urgency in valid_urgency else "medium"
+            signal.sentiment = sentiment if sentiment in valid_sentiment else "neutral"
+
+            relevance_score = float(result.get("relevance_score", 0.0))
+            return max(0.0, min(1.0, relevance_score))
         except Exception:
-            pass  # DB errors shouldn't crash radar
+            logger.exception("Failed to assess signal relevance for: %s", signal.title)
+            signal.urgency = "medium"
+            signal.sentiment = "neutral"
+            return 0.7
