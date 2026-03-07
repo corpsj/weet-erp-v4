@@ -64,7 +64,6 @@ async def test_lead_hunt_calls_instagram_channel(scheduler):
     mock_channel = AsyncMock()
     mock_channel.get_competitor_commenters.return_value = []
     mock_channel.get_competitor_likers.return_value = []
-    mock_channel.get_hashtag_users.return_value = []
 
     mock_bridge = AsyncMock()
     mock_bridge.close = AsyncMock()
@@ -77,7 +76,6 @@ async def test_lead_hunt_calls_instagram_channel(scheduler):
 
     mock_channel.get_competitor_commenters.assert_called_once()
     mock_channel.get_competitor_likers.assert_called_once()
-    mock_channel.get_hashtag_users.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -90,7 +88,6 @@ async def test_lead_hunt_records_metrics(scheduler):
     mock_channel = AsyncMock()
     mock_channel.get_competitor_commenters.return_value = [mock_lead]
     mock_channel.get_competitor_likers.return_value = []
-    mock_channel.get_hashtag_users.return_value = []
 
     mock_bridge = AsyncMock()
     mock_bridge.close = AsyncMock()

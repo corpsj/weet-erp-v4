@@ -294,8 +294,7 @@ class WeetScheduler:
         try:
             commenters = await channel.get_competitor_commenters()
             likers = await channel.get_competitor_likers()
-            hashtag_users = await channel.get_hashtag_users()
-            total_leads = commenters + likers + hashtag_users
+            total_leads = commenters + likers
 
             self._record_daily_metric("leads_collected", len(total_leads))
 

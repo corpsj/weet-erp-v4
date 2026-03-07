@@ -129,13 +129,6 @@ async def test_get_competitor_commenters_returns_empty(channel):
     assert result == []
 
 
-@pytest.mark.asyncio
-async def test_get_hashtag_users_returns_empty(channel):
-    """Stub returns empty list (no credentials)."""
-    result = await channel.get_hashtag_users("귀촌")
-    assert result == []
-
-
 def test_lead_candidate_defaults():
     """LeadCandidate dataclass defaults are correct."""
     lc = LeadCandidate(username="test_user")
@@ -221,31 +214,6 @@ async def test_get_competitor_likers(channel):
 
 
 @pytest.mark.asyncio
-async def test_get_hashtag_users(channel):
-    """Collects leads from hashtag recent posts via instagrapi."""
-    mock_media = MagicMock()
-    mock_media.pk = 11111
-    mock_media.user.username = "귀촌생활중"
-    mock_ig_client = MagicMock()
-    mock_ig_client.hashtag_medias_recent.return_value = [mock_media]
-
-    with (
-        patch.object(channel, "_is_operating_hours", return_value=True),
-        patch.object(channel, "_is_in_cooldown", return_value=False),
-        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
-        patch("app.channels.instagram.get_instagram_settings", return_value=["귀촌"]),
-        patch.object(channel, "save_lead_to_db", return_value=1),
-        patch("asyncio.sleep", return_value=None),
-    ):
-        leads = await channel.get_hashtag_users()
-
-    assert len(leads) == 1
-    assert leads[0].username == "귀촌생활중"
-    assert leads[0].source == "hashtag"
-    assert leads[0].metadata["hashtag"] == "귀촌"
-
-
-@pytest.mark.asyncio
 async def test_competitor_private_account(channel):
     """Private competitor account is skipped gracefully."""
     mock_ig_client = MagicMock()
@@ -264,29 +232,6 @@ async def test_competitor_private_account(channel):
         leads = await channel.get_competitor_commenters()
 
     assert leads == []  # no crash, empty result
-
-
-@pytest.mark.asyncio
-async def test_restricted_hashtag(channel):
-    """Restricted hashtag is skipped gracefully."""
-    mock_ig_client = MagicMock()
-    mock_ig_client.hashtag_medias_recent.side_effect = Exception(
-        "restricted hashtag blocked"
-    )
-
-    with (
-        patch.object(channel, "_is_operating_hours", return_value=True),
-        patch.object(channel, "_is_in_cooldown", return_value=False),
-        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
-        patch(
-            "app.channels.instagram.get_instagram_settings",
-            return_value=["restricted_tag"],
-        ),
-        patch("asyncio.sleep", return_value=None),
-    ):
-        leads = await channel.get_hashtag_users()
-
-    assert leads == []  # no crash
 
 
 @pytest.mark.asyncio
@@ -339,11 +284,9 @@ async def test_cooldown_blocks_lead_collection(channel):
     ):
         commenters = await channel.get_competitor_commenters()
         likers = await channel.get_competitor_likers()
-        hashtag_users = await channel.get_hashtag_users()
 
     assert commenters == []
     assert likers == []
-    assert hashtag_users == []
 
 
 # ── Wave 3: Action Block Cooldown Tests ────────────────────────────────────

@@ -5,7 +5,7 @@ import logging
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from app.clients.instagram_client import InstagrapiClient
 from app.core.config import Settings
@@ -13,6 +13,7 @@ from app.core.discord_bot import DiscordBot
 from app.db.models import Lead, LeadAction
 from app.db.session import get_supabase
 from app.leads.discovery import DailyLimitTracker
+from app.leads.scorer import LeadScorer
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ BOT_PATTERNS = [
 ]
 
 
-def get_instagram_settings(key: str) -> list[str]:
+def get_instagram_settings(key: str) -> list[Any]:
     """Get Instagram settings from marketing_settings table.
 
     Returns JSON array value for the given key, or empty list if not found.
@@ -57,6 +58,22 @@ def get_instagram_settings(key: str) -> list[str]:
         return []
     except Exception:
         return []
+
+
+def _extract_competitor_usernames(raw: list[Any]) -> list[str]:
+    """Extract username strings from competitor settings.
+
+    Handles both plain strings and JSON objects with 'username' field.
+    """
+    usernames: list[str] = []
+    for item in raw:
+        if isinstance(item, str):
+            usernames.append(item)
+        elif isinstance(item, dict):
+            username = item.get("username")
+            if username and isinstance(username, str) and item.get("isActive", True):
+                usernames.append(username)
+    return usernames
 
 
 def set_instagram_settings(key: str, value: list[str]) -> bool:
@@ -185,7 +202,7 @@ class InstagramChannel:
             return None
 
     async def get_competitor_commenters(
-        self, username: str | None = None
+        self, username: Optional[str] = None
     ) -> list[LeadCandidate]:
         """Collect leads from competitor's post commenters via instagrapi."""
         if not self._is_operating_hours():
@@ -199,7 +216,8 @@ class InstagramChannel:
         if client is None:
             return []
 
-        competitors = get_instagram_settings("instagram_competitors")
+        raw_competitors = get_instagram_settings("instagram_competitors")
+        competitors = _extract_competitor_usernames(raw_competitors)
         if not competitors:
             logger.info("No competitor accounts configured")
             return []
@@ -271,7 +289,7 @@ class InstagramChannel:
         return leads
 
     async def get_competitor_likers(
-        self, post_id: str | None = None
+        self, post_id: Optional[str] = None
     ) -> list[LeadCandidate]:
         """Collect leads from competitor's post likers via instagrapi."""
         if not self._is_operating_hours():
@@ -285,7 +303,8 @@ class InstagramChannel:
         if client is None:
             return []
 
-        competitors = get_instagram_settings("instagram_competitors")
+        raw_competitors = get_instagram_settings("instagram_competitors")
+        competitors = _extract_competitor_usernames(raw_competitors)
         if not competitors:
             logger.info("No competitor accounts configured")
             return []
@@ -353,75 +372,6 @@ class InstagramChannel:
 
         return leads
 
-    async def get_hashtag_users(
-        self, hashtag: str | None = None
-    ) -> list[LeadCandidate]:
-        """Collect leads from hashtag recent posts via instagrapi."""
-        if not self._is_operating_hours():
-            logger.info("Outside operating hours, skipping hashtag users")
-            return []
-        if self._is_in_cooldown():
-            logger.info("Skipping lead collection: in action block cooldown")
-            return []
-
-        client = await self._get_authenticated_client()
-        if client is None:
-            return []
-
-        hashtags = get_instagram_settings("instagram_target_hashtags")
-        if not hashtags:
-            logger.info("No target hashtags configured")
-            return []
-
-        leads: list[LeadCandidate] = []
-        seen_usernames: set[str] = set()
-
-        for tag in hashtags:
-            try:
-                await asyncio.sleep(self._random_delay())
-                medias = await self._run_sync(
-                    lambda: client.hashtag_medias_recent(tag, amount=20)
-                )
-
-                for media in medias:
-                    author = media.user.username
-                    if author in seen_usernames:
-                        continue
-                    seen_usernames.add(author)
-
-                    if self._is_bot_account(author):
-                        continue
-
-                    lead = LeadCandidate(
-                        username=author,
-                        platform="instagram",
-                        source="hashtag",
-                        metadata={
-                            "hashtag": tag,
-                            "media_id": str(media.pk),
-                        },
-                    )
-                    await self.save_lead_to_db(lead)
-                    leads.append(lead)
-            except Exception as exc:
-                exc_text = str(exc).lower()
-                if (
-                    "action_block" in exc_text
-                    or "action blocked" in exc_text
-                    or "temporarily blocked" in exc_text
-                ):
-                    self._handle_action_block()
-                    return leads
-                elif "restricted" in exc_text or "blocked" in exc_text:
-                    logger.warning("Hashtag '%s' is restricted, skipping", tag)
-                else:
-                    logger.error(
-                        "Error collecting users from hashtag '%s': %s", tag, exc
-                    )
-                continue
-
-        return leads
-
     async def like_post(self, post_id: str) -> bool:
         """Like a post with rate limit and delay check."""
         if not self._is_operating_hours():
@@ -460,37 +410,138 @@ class InstagramChannel:
         return PostResult(success=True, post_id="mock_post_id")
 
     async def save_lead_to_db(self, candidate: LeadCandidate) -> Optional[int]:
-        """Save a discovered lead to the database with deduplication.
+        """Save a lead with per-competitor engagement accumulation.
 
-        Uses select-then-upsert on (platform, username) to prevent duplicates.
-        If lead already exists, updates score and metadata.
+        On duplicate (platform, username): merges by_competitor stats, increments
+        encounters, re-scores using engagement model.
         """
         if self._is_bot_account(candidate.username):
             return None
+
         sb = get_supabase()
+        source_account: str = candidate.metadata.get("source_account", "unknown")
+        media_id: str = candidate.metadata.get("media_id", "")
+        source_type = candidate.source
+
         existing = (
             sb.table("marketing_leads")
-            .select("id")
+            .select("id, metadata, score")
             .eq("platform", candidate.platform)
             .eq("username", candidate.username)
             .limit(1)
             .execute()
         )
-        payload = {
-            "platform": candidate.platform,
-            "username": candidate.username,
-            "source": candidate.source,
-            "metadata": candidate.metadata,
-        }
+
         if existing.data and len(existing.data) > 0:
-            lead_id = existing.data[0].get("id")
-            sb.table("marketing_leads").update(payload).eq("id", lead_id).execute()
+            row = existing.data[0]
+            lead_id = row.get("id")
+            old_meta: dict[str, Any] = row.get("metadata") or {}
+
+            by_comp: dict[str, Any] = old_meta.get("by_competitor", {})
+            comp_entry: dict[str, Any] = by_comp.get(
+                source_account,
+                {
+                    "comment_count": 0,
+                    "like_count": 0,
+                    "media_ids": [],
+                },
+            )
+
+            if source_type == "competitor_comment":
+                comp_entry["comment_count"] = comp_entry.get("comment_count", 0) + 1
+            elif source_type == "competitor_liker":
+                comp_entry["like_count"] = comp_entry.get("like_count", 0) + 1
+
+            existing_media_ids: list[str] = comp_entry.get("media_ids", [])
+            if media_id and media_id not in existing_media_ids:
+                existing_media_ids.append(media_id)
+            comp_entry["media_ids"] = existing_media_ids
+
+            by_comp[source_account] = comp_entry
+
+            total_cc = sum(
+                c.get("comment_count", 0)
+                for c in by_comp.values()
+                if isinstance(c, dict)
+            )
+            total_lc = sum(
+                c.get("like_count", 0) for c in by_comp.values() if isinstance(c, dict)
+            )
+
+            sources: list[str] = old_meta.get("sources", [])
+            if source_type not in sources:
+                sources.append(source_type)
+
+            encounters = old_meta.get("encounters", 1) + 1
+
+            merged_meta: dict[str, Any] = {
+                "encounters": encounters,
+                "sources": sources,
+                "by_competitor": by_comp,
+                "total_comment_count": total_cc,
+                "total_like_count": total_lc,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            scorer = LeadScorer()
+            scored = scorer.score_with_engagement(
+                candidate.username, candidate.platform, merged_meta
+            )
+
+            sb.table("marketing_leads").update(
+                {
+                    "source": scored.source,
+                    "score": scored.score,
+                    "metadata": merged_meta,
+                }
+            ).eq("id", lead_id).execute()
+
             candidate.id = lead_id
+            candidate.metadata = merged_meta
             return lead_id
         else:
-            result = sb.table("marketing_leads").insert(payload).execute()
+            by_comp: dict[str, Any] = {}
+            comp_entry: dict[str, Any] = {
+                "comment_count": 1 if source_type == "competitor_comment" else 0,
+                "like_count": 1 if source_type == "competitor_liker" else 0,
+                "media_ids": [media_id] if media_id else [],
+            }
+            by_comp[source_account] = comp_entry
+
+            total_cc = comp_entry["comment_count"]
+            total_lc = comp_entry["like_count"]
+
+            new_meta: dict[str, Any] = {
+                "encounters": 1,
+                "sources": [source_type],
+                "by_competitor": by_comp,
+                "total_comment_count": total_cc,
+                "total_like_count": total_lc,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            scorer = LeadScorer()
+            scored = scorer.score_with_engagement(
+                candidate.username, candidate.platform, new_meta
+            )
+
+            result = (
+                sb.table("marketing_leads")
+                .insert(
+                    {
+                        "platform": candidate.platform,
+                        "username": candidate.username,
+                        "source": scored.source,
+                        "score": scored.score,
+                        "metadata": new_meta,
+                    }
+                )
+                .execute()
+            )
+
             if result.data and len(result.data) > 0:
                 lead_id = result.data[0].get("id")
                 candidate.id = lead_id
+                candidate.metadata = new_meta
                 return lead_id
             return None

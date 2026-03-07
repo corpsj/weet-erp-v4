@@ -110,7 +110,13 @@ class LeadDiscovery:
         source: str,
         metadata: Union[dict[str, object], None] = None,
     ) -> Lead:
-        scored = self.scorer.score(username, platform, source)
+        if metadata and "by_competitor" in metadata:
+            scored = self.scorer.score_with_engagement(
+                username, platform, dict(metadata)
+            )
+        else:
+            scored = self.scorer.score(username, platform, source)
+
         bio_value = metadata.get("bio") if metadata else ""
         activity = bio_value if isinstance(bio_value, str) else ""
 
@@ -139,7 +145,7 @@ class LeadDiscovery:
                     "username": username,
                     "score": scored.score,
                     "persona_type": persona.value,
-                    "source": source,
+                    "source": scored.source,
                     "metadata": metadata or {},
                 }
             )
@@ -163,7 +169,7 @@ class LeadDiscovery:
                 username=username,
                 score=scored.score,
                 persona_type=persona.value,
-                source=source,
+                source=scored.source,
                 metadata_=metadata or {},
             )
 
@@ -172,6 +178,6 @@ class LeadDiscovery:
             username=username,
             score=scored.score,
             persona_type=persona.value,
-            source=source,
+            source=scored.source,
             metadata_=metadata or {},
         )
