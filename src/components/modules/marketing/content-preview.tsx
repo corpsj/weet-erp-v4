@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatDate } from '@/lib/utils/format';
 import { CONTENT_STATUS_LABELS, type MarketingContent } from '@/types/marketing';
 
-export type Content = Pick<MarketingContent, 'id' | 'channel' | 'title' | 'body' | 'status' | 'createdAt' | 'engagementMetrics' | 'publishedAt'>;
+export type Content = Pick<MarketingContent, 'id' | 'channel' | 'title' | 'body' | 'status' | 'createdAt' | 'engagementMetrics' | 'publishedAt' | 'publishedBy'>;
 
 interface ContentPreviewProps {
   content: Content;
@@ -59,6 +59,9 @@ export function ContentPreview({ content }: ContentPreviewProps) {
           <ChannelIcon className="h-5 w-5 text-[#9a9a9a]" />
           <Badge tone="neutral">{content.channel}</Badge>
           <Badge tone={statusTone(content.status)}>{CONTENT_STATUS_LABELS[content.status] || content.status}</Badge>
+          {content.publishedBy === 'openclaw' && (
+            <Badge tone="brand">자동 배포</Badge>
+          )}
         </div>
         <span className="text-xs text-[#9a9a9a] font-mono">{formattedDate}</span>
       </div>

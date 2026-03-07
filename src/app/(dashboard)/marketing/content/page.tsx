@@ -24,8 +24,11 @@ export default function ContentPage() {
   );
 }
 
+type PublishFilter = "전체" | "수동" | "자동";
+
 function ContentPageBody() {
   const [activeChannel, setActiveChannel] = useState("전체");
+  const [publishFilter, setPublishFilter] = useState<PublishFilter>("전체");
   const { data: contents, isLoading, isError, refetch } = useMarketingContent();
 
   const allContents = useMemo(() => contents ?? [], [contents]);
@@ -45,9 +48,17 @@ function ContentPageBody() {
   }, [channelCounts]);
 
   const filteredContents = useMemo(() => {
-    if (activeChannel === "전체") return allContents;
-    return allContents.filter((content) => content.channel === activeChannel);
-  }, [activeChannel, allContents]);
+    let result = allContents;
+    if (activeChannel !== "전체") {
+      result = result.filter((content) => content.channel === activeChannel);
+    }
+    if (publishFilter === "자동") {
+      result = result.filter((content) => content.publishedBy === "openclaw");
+    } else if (publishFilter === "수동") {
+      result = result.filter((content) => content.publishedBy !== "openclaw");
+    }
+    return result;
+  }, [activeChannel, publishFilter, allContents]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -58,13 +69,14 @@ function ContentPageBody() {
   }, [filteredContents]);
 
   function exportContentCsv() {
-    const header = "채널,제목,상태,생성일,발행일\n";
+    const header = "채널,제목,상태,배포방식,생성일,발행일\n";
     const rows = filteredContents
       .map((content) =>
         [
           content.channel,
           content.title ?? "",
           CONTENT_STATUS_LABELS[content.status] ?? content.status,
+          content.publishedBy === "openclaw" ? "자동" : "수동",
           content.createdAt,
           content.publishedAt ?? "",
         ].join(","),
@@ -95,6 +107,22 @@ function ContentPageBody() {
               }`}
             >
               {channel} ({channel === "전체" ? allContents.length : channelCounts[channel] ?? 0})
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          {(["전체", "수동", "자동"] as const).map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              onClick={() => setPublishFilter(filter)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                publishFilter === filter
+                  ? "bg-[#1a1a1a] text-[#ffffff]"
+                  : "text-[#9a9a9a] hover:bg-[#141414]"
+              }`}
+            >
+              {filter === "자동" ? "🤖 자동" : filter === "수동" ? "✋ 수동" : filter}
             </button>
           ))}
         </div>

@@ -1,12 +1,12 @@
 "use client";
 
 import { ModuleShell } from "@/components/layout/module-shell";
-import { useSystemStatus } from "@/lib/api/hooks/marketing";
+import { useSystemStatus, useOpenClawStatus } from "@/lib/api/hooks/marketing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils/format";
-import { Play, Zap } from "lucide-react";
+import { Bot, Play, Zap } from "lucide-react";
 
 export default function SystemPage() {
   return (
@@ -22,6 +22,7 @@ export default function SystemPage() {
 
 function SystemContent() {
   const { data: status, isLoading, isError, refetch } = useSystemStatus();
+  const { data: openclawStatus, isLoading: isOpenClawLoading } = useOpenClawStatus();
 
   const schedulerRunning = status?.scheduler.running ?? false;
   const ollamaConnected = status?.ollama.connected ?? false;
@@ -41,8 +42,8 @@ function SystemContent() {
   return (
     <div className="space-y-8">
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="animate-pulse bg-[#141414] rounded-md border border-[#2a2a2a] p-6 h-40" />
           ))}
         </div>
@@ -54,7 +55,7 @@ function SystemContent() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <Card className="flex h-48 flex-col justify-between">
             <div className="flex justify-between items-start">
               <h3 className="font-medium text-[#9a9a9a]">스케줄러</h3>
@@ -101,6 +102,33 @@ function SystemContent() {
               <p className="text-xs text-[#9a9a9a] mt-2">리셋 예정: {naverResetAt}</p>
             </div>
             <p className="text-xs text-[#9a9a9a]">Python 스케줄러 연결 시 실시간 표시</p>
+          </Card>
+
+          <Card className="flex h-48 flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <h3 className="font-medium text-[#9a9a9a]">OpenClaw Agent</h3>
+              {isOpenClawLoading ? (
+                <div className="h-5 w-16 animate-pulse bg-[#1a1a1a] rounded-full" />
+              ) : (
+                <Badge tone={openclawStatus?.status === "online" ? "brand" : "danger"}>
+                  {openclawStatus?.status === "online" ? "ONLINE" : "OFFLINE"}
+                </Badge>
+              )}
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-[#ffffff]">
+                <Bot className="inline-block h-6 w-6 mr-1 -mt-1" />
+                마케팅 자동화
+              </p>
+              <p className="text-sm text-[#9a9a9a] mt-1">
+                에이전트 {openclawStatus?.agents?.length ?? 0}개 · 스킬 {openclawStatus?.skillsCount ?? 0}개
+              </p>
+            </div>
+            <p className="text-xs text-[#9a9a9a]">
+              {openclawStatus?.lastChecked
+                ? `마지막 확인: ${formatDate(openclawStatus.lastChecked)}`
+                : "상태 확인 중..."}
+            </p>
           </Card>
         </div>
       )}
