@@ -25,7 +25,19 @@ class Action:
 
 
 class JourneyManager:
-    HANDOFF_KEYWORDS: list[str] = ["가격", "견적", "계약", "전화"]
+    HANDOFF_KEYWORDS: list[str] = [
+        "가격",
+        "견적",
+        "계약",
+        "전화",
+        "상담",
+        "방문",
+        "구경",
+        "실물",
+        "모델하우스",
+        "평수",
+        "평형",
+    ]
     DM_COOLDOWN_HOURS: int = 24
 
     def __init__(

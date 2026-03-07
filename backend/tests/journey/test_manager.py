@@ -138,3 +138,8 @@ async def test_generate_nurture_message_returns_korean(manager: JourneyManager) 
     assert "안녕하세요" in message
     generate_mock = cast(MagicMock, manager.llm_service.generate)
     generate_mock.assert_called_once()
+
+
+def test_expanded_handoff_keywords() -> None:
+    for keyword in ["상담", "방문", "구경", "실물", "모델하우스", "평수", "평형"]:
+        assert keyword in JourneyManager.HANDOFF_KEYWORDS
