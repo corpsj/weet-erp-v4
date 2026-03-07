@@ -86,6 +86,12 @@ class WeetScheduler:
             CronTrigger(hour=18, minute=0, timezone="Asia/Seoul"),
             id="lead_hunt",
         )
+        IntervalTrigger = import_module("apscheduler.triggers.interval").IntervalTrigger
+        _ = self.scheduler.add_job(
+            self._job_manual_lead_collect,
+            IntervalTrigger(minutes=5),
+            id="manual_lead_collect",
+        )
         _ = self.scheduler.add_job(
             self._job_evening_followup,
             CronTrigger(hour=21, minute=0, timezone="Asia/Seoul"),
@@ -406,6 +412,51 @@ class WeetScheduler:
             logger.info("Skipping evening_followup outside Instagram hours")
             return
         await self._run_task("evening_followup", self._run_evening_followup_job)
+
+    def _check_manual_collect_flag(self) -> bool:
+        try:
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_settings")
+                .select("value")
+                .eq("key", "lead_collection_requested")
+                .limit(1)
+                .execute()
+            )
+            if not result.data:
+                return False
+            value = result.data[0].get("value")
+            if isinstance(value, dict):
+                return bool(value.get("requested", False))
+            return False
+        except Exception as exc:
+            logger.warning("Failed to check manual collect flag: %s", exc)
+            return False
+
+    def _clear_manual_collect_flag(self) -> None:
+        try:
+            sb = get_supabase()
+            sb.table("marketing_settings").upsert(
+                {
+                    "key": "lead_collection_requested",
+                    "value": {
+                        "requested": False,
+                        "completed_at": datetime.now(self._kst).isoformat(),
+                    },
+                }
+            ).execute()
+        except Exception as exc:
+            logger.warning("Failed to clear manual collect flag: %s", exc)
+
+    async def _job_manual_lead_collect(self) -> None:
+        if self.dry_run:
+            return
+        if not self._check_manual_collect_flag():
+            return
+        logger.info("Manual lead collection triggered via web UI")
+        await self._run_task("manual_lead_collect", self._run_lead_hunt_job)
+        self._clear_manual_collect_flag()
+        logger.info("Manual lead collection completed, flag cleared")
 
     async def _job_weekly_report(self) -> None:
         await self._run_task("weekly_report", self._noop)

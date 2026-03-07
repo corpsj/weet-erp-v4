@@ -13,7 +13,7 @@ def test_setup_jobs_registers_jobs() -> None:
 
     scheduler.setup_jobs()
 
-    assert len(scheduler.get_job_ids()) >= 11
+    assert len(scheduler.get_job_ids()) >= 12
 
 
 def test_scheduler_has_daily_reset_job() -> None:
@@ -201,3 +201,38 @@ async def test_evening_followup_uses_engagement(scheduler):
         await scheduler._run_evening_followup_job()
 
     mock_metric.assert_called_with("proposals_made", 2)
+
+
+def test_manual_collect_job_registered():
+    scheduler = create_scheduler()
+    scheduler.setup_jobs()
+    assert "manual_lead_collect" in scheduler.get_job_ids()
+
+
+@pytest.mark.asyncio
+async def test_manual_collect_skips_when_no_flag(scheduler):
+    with patch.object(scheduler, "_check_manual_collect_flag", return_value=False):
+        await scheduler._job_manual_lead_collect()
+
+
+@pytest.mark.asyncio
+async def test_manual_collect_runs_when_flag_set():
+    runner = AsyncMock()
+    scheduler = WeetScheduler(runner=runner, dry_run=False)
+
+    mock_channel = AsyncMock()
+    mock_channel.get_competitor_commenters.return_value = []
+    mock_channel.get_competitor_likers.return_value = []
+
+    mock_bridge = AsyncMock()
+    mock_bridge.close = AsyncMock()
+
+    with (
+        patch.object(scheduler, "_check_manual_collect_flag", return_value=True),
+        patch.object(scheduler, "_clear_manual_collect_flag") as mock_clear,
+        patch("app.channels.instagram.InstagramChannel", return_value=mock_channel),
+        patch("app.orchestrator.scheduler.OpenClawBridge", return_value=mock_bridge),
+    ):
+        await scheduler._job_manual_lead_collect()
+
+    mock_clear.assert_called_once()
