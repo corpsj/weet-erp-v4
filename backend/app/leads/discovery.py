@@ -1,6 +1,6 @@
 import random
-from datetime import datetime, timezone
-from typing import Union, cast
+from datetime import date, datetime, timezone
+from typing import Any, Union, cast
 
 from app.core.discord_bot import DiscordBot
 from app.db.models import Lead
@@ -14,7 +14,12 @@ OPERATING_HOURS_END = 23
 
 class DailyLimitTracker:
     def __init__(
-        self, likes: int = 150, follows: int = 50, comments: int = 30, dms: int = 15
+        self,
+        likes: int = 150,
+        follows: int = 50,
+        comments: int = 30,
+        dms: int = 15,
+        supabase_client: Union[Any, None] = None,
     ):
         self.limits: dict[str, int] = {
             "likes": likes,
@@ -28,6 +33,42 @@ class DailyLimitTracker:
             "comments": 0,
             "dms": 0,
         }
+        self._supabase = supabase_client
+        if self._supabase is not None:
+            self._load_from_db()
+
+    def _db_key(self) -> str:
+        return f"instagram_daily_counts_{date.today().isoformat()}"
+
+    def _load_from_db(self) -> None:
+        if self._supabase is None:
+            return
+        try:
+            result = (
+                self._supabase.table("marketing_settings")
+                .select("value")
+                .eq("key", self._db_key())
+                .limit(1)
+                .execute()
+            )
+            if result.data and len(result.data) > 0:
+                value = result.data[0].get("value")
+                if isinstance(value, dict):
+                    for k in self.counts:
+                        self.counts[k] = int(value.get(k, 0))
+        except Exception:
+            pass  # Fall back to zero counts
+
+    def _save_to_db(self) -> None:
+        if self._supabase is None:
+            return
+        try:
+            self._supabase.table("marketing_settings").upsert(
+                {"key": self._db_key(), "value": self.counts},
+                on_conflict="key",
+            ).execute()
+        except Exception:
+            pass  # Best effort persistence
 
     def record(self, action_type: str) -> bool:
         if action_type not in self.limits:
@@ -37,10 +78,12 @@ class DailyLimitTracker:
                 f"Daily {action_type} limit exceeded ({self.limits[action_type]})"
             )
         self.counts[action_type] += 1
+        self._save_to_db()
         return True
 
     def reset(self) -> None:
         self.counts = {k: 0 for k in self.counts}
+        self._save_to_db()
 
     def remaining(self, action_type: str) -> int:
         return max(0, self.limits.get(action_type, 0) - self.counts.get(action_type, 0))

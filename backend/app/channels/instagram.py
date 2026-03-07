@@ -30,6 +30,46 @@ BOT_PATTERNS = [
 ]
 
 
+def get_instagram_settings(key: str) -> list[str]:
+    """Get Instagram settings from marketing_settings table.
+
+    Returns JSON array value for the given key, or empty list if not found.
+    """
+    try:
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_settings")
+            .select("value")
+            .eq("key", key)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            value = result.data[0].get("value")
+            if isinstance(value, list):
+                return value
+            return []
+        return []
+    except Exception:
+        return []
+
+
+def set_instagram_settings(key: str, value: list[str]) -> bool:
+    """Save Instagram settings to marketing_settings table.
+
+    Upserts the key-value pair (JSON array) into marketing_settings.
+    Returns True on success, False on failure.
+    """
+    try:
+        sb = get_supabase()
+        sb.table("marketing_settings").upsert(
+            {"key": key, "value": value}, on_conflict="key"
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
 @dataclass
 class PostResult:
     success: bool
@@ -123,22 +163,34 @@ class InstagramChannel:
         return PostResult(success=True, post_id="mock_post_id")
 
     async def save_lead_to_db(self, candidate: LeadCandidate) -> Optional[int]:
-        """Save a discovered lead to the database."""
+        """Save a discovered lead to the database with deduplication.
+
+        Uses select-then-upsert on (platform, username) to prevent duplicates.
+        If lead already exists, updates score and metadata.
+        """
         if self._is_bot_account(candidate.username):
             return None
         sb = get_supabase()
-        result = (
+        existing = (
             sb.table("marketing_leads")
-            .insert(
-                {
-                    "platform": candidate.platform,
-                    "username": candidate.username,
-                    "source": candidate.source,
-                    "metadata": candidate.metadata,
-                }
-            )
+            .select("id")
+            .eq("platform", candidate.platform)
+            .eq("username", candidate.username)
+            .limit(1)
             .execute()
         )
-        if result.data and len(result.data) > 0:
-            return result.data[0].get("id")
-        return None
+        payload = {
+            "platform": candidate.platform,
+            "username": candidate.username,
+            "source": candidate.source,
+            "metadata": candidate.metadata,
+        }
+        if existing.data and len(existing.data) > 0:
+            lead_id = existing.data[0].get("id")
+            sb.table("marketing_leads").update(payload).eq("id", lead_id).execute()
+            return lead_id
+        else:
+            result = sb.table("marketing_leads").insert(payload).execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0].get("id")
+            return None

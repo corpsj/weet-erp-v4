@@ -41,6 +41,7 @@ class InstagramConfig(BaseModel):
 
     username: str = ""
     password: str = ""
+    session_dir: str = "backend/.sessions"
 
 
 class SchedulerConfig(BaseModel):
