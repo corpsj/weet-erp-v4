@@ -10,6 +10,7 @@ import type {
   MarketSignal,
   DailyMetric,
   SystemStatus,
+  OpenClawStatus,
   LeadFilters,
 } from "@/types/marketing";
 
@@ -81,6 +82,15 @@ export function useSystemStatus() {
   return useQuery({
     queryKey: ["marketing", "system-status"],
     queryFn: () => fetchApi<SystemStatus>("/api/marketing/system/status"),
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useOpenClawStatus() {
+  return useQuery({
+    queryKey: ["marketing", "openclaw-status"],
+    queryFn: () =>
+      fetchApi<OpenClawStatus>("/api/marketing/system/openclaw"),
     staleTime: 1000 * 30,
   });
 }

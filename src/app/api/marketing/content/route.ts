@@ -13,6 +13,8 @@ type MarketingContentRow = {
   persona_target: string | null;
   created_at: string;
   published_at: string | null;
+  published_by: string | null;
+  openclaw_job_id: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -49,6 +51,8 @@ export async function GET(request: NextRequest) {
       personaTarget: row.persona_target,
       createdAt: row.created_at,
       publishedAt: row.published_at,
+      publishedBy: (row.published_by === "openclaw" ? "openclaw" : "manual") as "manual" | "openclaw",
+      openclawJobId: row.openclaw_job_id,
     }));
 
     return ok(contents);
