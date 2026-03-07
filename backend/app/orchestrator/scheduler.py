@@ -118,6 +118,24 @@ class WeetScheduler:
         self, task_name: str, fn: Callable[[], Awaitable[None]]
     ) -> None:
         _ = await self.runner.run(task_name, fn)
+        self._write_heartbeat(task_name)
+
+    def _write_heartbeat(self, last_task: str) -> None:
+        try:
+            sb = get_supabase()
+            now = datetime.now(self._kst)
+            sb.table("marketing_settings").upsert(
+                {
+                    "key": "scheduler_heartbeat",
+                    "value": {
+                        "timestamp": now.isoformat(),
+                        "last_run": now.isoformat(),
+                        "last_task": last_task,
+                    },
+                }
+            ).execute()
+        except Exception as exc:
+            logger.warning("Failed to write scheduler heartbeat: %s", exc)
 
     def _can_run_instagram_action(self) -> bool:
         hour = datetime.now(self._kst).hour
