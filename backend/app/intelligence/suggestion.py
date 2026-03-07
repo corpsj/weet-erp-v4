@@ -26,7 +26,11 @@ class SuggestionEngine:
         self.llm = LLMService()
         self.discord = DiscordBot()
 
-    async def generate_suggestions(self, max_proposals: int = 3) -> list[ProposalData]:
+    async def generate_suggestions(
+        self,
+        max_proposals: int = 3,
+        prior_insights: dict[str, Any] | None = None,
+    ) -> list[ProposalData]:
         signals = await self._get_recent_signals(limit=10)
         lead_count = await self._get_lead_count()
         metrics = await self._get_recent_metrics()
@@ -45,10 +49,19 @@ class SuggestionEngine:
         signals_text = "\n".join(
             [f"- [{s['source']}] {s['title']}: {s['summary']}" for s in signals[:5]]
         )
-        prompt = SUGGESTION_PROMPT.format(
-            signals=signals_text or "수집된 신호 없음",
-            lead_count=lead_count,
-            metrics=str(metrics),
+        insights_text = ""
+        if prior_insights and prior_insights.get("insights"):
+            insights_text = "\n과거 학습: " + "; ".join(
+                str(insight) for insight in prior_insights["insights"]
+            )
+
+        prompt = (
+            SUGGESTION_PROMPT.format(
+                signals=signals_text or "수집된 신호 없음",
+                lead_count=lead_count,
+                metrics=str(metrics),
+            )
+            + insights_text
         )
 
         try:

@@ -138,3 +138,35 @@ async def test_learn_from_results_empty(engine):
 
     assert result["total"] == 0
     assert result["approval_rate"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_generate_suggestions_with_prior_insights(engine):
+    engine.llm.analyze.return_value = {
+        "title": "맞춤 제안",
+        "action_type": "content",
+        "rationale": "근거",
+    }
+
+    with patch.object(
+        engine,
+        "_get_recent_signals",
+        return_value=[
+            {
+                "source": "naver_news",
+                "title": "신호",
+                "summary": "요약",
+            }
+        ],
+    ):
+        with patch.object(engine, "_get_lead_count", return_value=4):
+            with patch.object(engine, "_get_recent_metrics", return_value={}):
+                _ = await engine.generate_suggestions(
+                    prior_insights={
+                        "insights": ["content 유형 거부율 높음"],
+                        "approval_rate": 0.4,
+                    }
+                )
+
+    called_prompt = engine.llm.analyze.call_args.args[0]
+    assert "content 유형 거부율 높음" in called_prompt
