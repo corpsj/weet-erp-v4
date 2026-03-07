@@ -20,6 +20,26 @@ class AgentResponseLike(Protocol):
     content: str
 
 
+_SKILLS_DIR = "/Users/zoopark-studio/.openclaw/workspace-marketing/skills"
+
+_INSTAGRAM_POSTER_INSTRUCTIONS = (
+    "Read and follow the SKILL.md at "
+    f"{_SKILLS_DIR}/instagram-poster/SKILL.md. "
+    "Use the browser tool (profile: marketing, port 18801) to post to Instagram. "
+    "Fetch content from Supabase, navigate instagram.com, upload and share. "
+    "Wait 30-90s before clicking Share. Check rate limits first (max 3/day). "
+)
+
+_LEAD_OUTREACH_INSTRUCTIONS = (
+    "Read and follow the SKILL.md at "
+    f"{_SKILLS_DIR}/lead-outreach/SKILL.md. "
+    "Use the browser tool (profile: marketing, port 18801) for Instagram actions. "
+    "Fetch the lead from Supabase by lead_id, navigate to their Instagram profile, "
+    "then perform the action. Wait 30-90s between actions. "
+    "Check rate limits and operating hours first. "
+)
+
+
 class OpenClawBridge:
     MAX_RETRIES: ClassVar[int] = 3
     TIMEOUT_SECONDS: ClassVar[int] = 120
@@ -105,19 +125,29 @@ class OpenClawBridge:
             "raw": self._serialize(response),
         }
 
-    async def publish_content(self, channel: str, content_id: str) -> dict[str, object]:
-        prompt = (
-            "Publish the requested content via configured channel. "
-            f"channel={channel}, content_id={content_id}. "
-            "Return concise execution result as JSON."
-        )
+    async def publish_content(
+        self, channel: str, content_id: str, image_path: str = ""
+    ) -> dict[str, object]:
+        if channel == "instagram":
+            prompt = (
+                _INSTAGRAM_POSTER_INSTRUCTIONS
+                + f"Parameters: content_id={content_id}"
+                + (f", image_path={image_path}" if image_path else "")
+                + ". Return the result as JSON."
+            )
+        else:
+            prompt = (
+                f"Publish content via {channel} channel. "
+                f"content_id={content_id}. "
+                "Return concise execution result as JSON."
+            )
         return await self._execute_marketing_prompt(prompt)
 
     async def outreach_lead(self, lead_id: str, action_type: str) -> dict[str, object]:
         prompt = (
-            "Execute lead outreach action. "
-            f"lead_id={lead_id}, action_type={action_type}. "
-            "Return concise execution result as JSON."
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type={action_type}. "
+            "Return the result as JSON."
         )
         return await self._execute_marketing_prompt(prompt)
 
@@ -126,6 +156,66 @@ class OpenClawBridge:
             "Scan competitors for the provided keywords and summarize opportunities. "
             f"keywords={', '.join(keywords)}. "
             "Return concise execution result as JSON."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    # --- Instagram Content Publishing (via instagram-poster skill) ---
+
+    async def publish_instagram_feed(
+        self, content_id: str, caption: str, image_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram feed post via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=image_path
+        )
+
+    async def publish_instagram_story(
+        self, content_id: str, media_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram story via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=media_path
+        )
+
+    async def publish_instagram_reel(
+        self, content_id: str, caption: str, video_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram reel via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=video_path
+        )
+
+    # --- Instagram Engagement (via lead-outreach skill) ---
+
+    async def engage_instagram_like(self, lead_id: str) -> dict[str, object]:
+        """Like the most recent post of a lead via lead-outreach skill."""
+        return await self.outreach_lead(lead_id=lead_id, action_type="like")
+
+    async def engage_instagram_follow(self, lead_id: str) -> dict[str, object]:
+        """Follow a lead on Instagram via lead-outreach skill."""
+        return await self.outreach_lead(lead_id=lead_id, action_type="follow")
+
+    async def engage_instagram_comment(
+        self, lead_id: str, comment_text: str
+    ) -> dict[str, object]:
+        prompt = (
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type=comment. "
+            f"Navigate to the lead's profile, find their latest post, "
+            f"and leave this comment: {comment_text}. "
+            "Brand tone: 친근하고 전문적, 과장 없음, 실용 정보 중심. "
+            "Return the result as JSON."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def engage_instagram_dm(
+        self, lead_id: str, message: str
+    ) -> dict[str, object]:
+        prompt = (
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type=dm. "
+            f"DM message to send: {message}. "
+            "Return the result as JSON."
         )
         return await self._execute_marketing_prompt(prompt)
 

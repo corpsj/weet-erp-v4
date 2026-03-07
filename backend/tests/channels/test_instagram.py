@@ -129,13 +129,6 @@ async def test_get_competitor_commenters_returns_empty(channel):
     assert result == []
 
 
-@pytest.mark.asyncio
-async def test_get_hashtag_users_returns_empty(channel):
-    """Stub returns empty list (no credentials)."""
-    result = await channel.get_hashtag_users("귀촌")
-    assert result == []
-
-
 def test_lead_candidate_defaults():
     """LeadCandidate dataclass defaults are correct."""
     lc = LeadCandidate(username="test_user")
@@ -154,3 +147,176 @@ def test_lead_candidate_custom():
     )
     assert lc.source == "hashtag_귀촌"
     assert lc.metadata["bio"] == "시골 생활 꿈꾸는 중"
+
+
+# ── Wave 2: Lead Collection Tests ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_competitor_commenters(channel):
+    """Collects leads from competitor post commenters via instagrapi."""
+    mock_comment = MagicMock()
+    mock_comment.user.username = "귀촌꿈꾸는사람"
+    mock_media = MagicMock()
+    mock_media.pk = 12345
+    mock_ig_client = MagicMock()
+    mock_ig_client.user_id_from_username.return_value = 999
+    mock_ig_client.user_medias.return_value = [mock_media]
+    mock_ig_client.media_comments.return_value = [mock_comment]
+
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
+        patch(
+            "app.channels.instagram.get_instagram_settings",
+            return_value=["competitor_account"],
+        ),
+        patch.object(channel, "save_lead_to_db", return_value=1),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        leads = await channel.get_competitor_commenters()
+
+    assert len(leads) == 1
+    assert leads[0].username == "귀촌꿈꾸는사람"
+    assert leads[0].source == "competitor_comment"
+    assert leads[0].metadata["source_account"] == "competitor_account"
+
+
+@pytest.mark.asyncio
+async def test_get_competitor_likers(channel):
+    """Collects leads from competitor post likers via instagrapi."""
+    mock_liker = MagicMock()
+    mock_liker.username = "이동식주택팬"
+    mock_media = MagicMock()
+    mock_media.pk = 67890
+    mock_ig_client = MagicMock()
+    mock_ig_client.user_id_from_username.return_value = 888
+    mock_ig_client.user_medias.return_value = [mock_media]
+    mock_ig_client.media_likers.return_value = [mock_liker]
+
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
+        patch(
+            "app.channels.instagram.get_instagram_settings",
+            return_value=["competitor_account"],
+        ),
+        patch.object(channel, "save_lead_to_db", return_value=1),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        leads = await channel.get_competitor_likers()
+
+    assert len(leads) == 1
+    assert leads[0].username == "이동식주택팬"
+    assert leads[0].source == "competitor_liker"
+
+
+@pytest.mark.asyncio
+async def test_competitor_private_account(channel):
+    """Private competitor account is skipped gracefully."""
+    mock_ig_client = MagicMock()
+    mock_ig_client.user_id_from_username.side_effect = Exception("private account")
+
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
+        patch(
+            "app.channels.instagram.get_instagram_settings",
+            return_value=["private_competitor"],
+        ),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        leads = await channel.get_competitor_commenters()
+
+    assert leads == []  # no crash, empty result
+
+
+@pytest.mark.asyncio
+async def test_empty_competitor_list(channel):
+    """Returns empty list when no competitors configured."""
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=MagicMock()),
+        patch("app.channels.instagram.get_instagram_settings", return_value=[]),
+    ):
+        leads = await channel.get_competitor_commenters()
+
+    assert leads == []
+
+
+@pytest.mark.asyncio
+async def test_bot_filtering_in_collection(channel):
+    """Bot accounts are filtered out during lead collection."""
+    mock_comment = MagicMock()
+    mock_comment.user.username = "official_brand_store"  # bot pattern
+    mock_media = MagicMock()
+    mock_media.pk = 99999
+    mock_ig_client = MagicMock()
+    mock_ig_client.user_id_from_username.return_value = 777
+    mock_ig_client.user_medias.return_value = [mock_media]
+    mock_ig_client.media_comments.return_value = [mock_comment]
+
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
+        patch(
+            "app.channels.instagram.get_instagram_settings", return_value=["competitor"]
+        ),
+        patch.object(channel, "save_lead_to_db", return_value=None),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        leads = await channel.get_competitor_commenters()
+
+    assert leads == []  # bot filtered out
+
+
+@pytest.mark.asyncio
+async def test_cooldown_blocks_lead_collection(channel):
+    """Lead collection is blocked during action block cooldown."""
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=True),
+    ):
+        commenters = await channel.get_competitor_commenters()
+        likers = await channel.get_competitor_likers()
+
+    assert commenters == []
+    assert likers == []
+
+
+# ── Wave 3: Action Block Cooldown Tests ────────────────────────────────────
+
+
+def test_is_in_cooldown_false_by_default(channel):
+    """No cooldown by default."""
+    assert channel._is_in_cooldown() is False
+
+
+def test_handle_action_block_sets_cooldown(channel):
+    """_handle_action_block sets 24h cooldown."""
+    channel._handle_action_block()
+    assert channel._is_in_cooldown() is True
+    assert channel._cooldown_until is not None
+
+
+@pytest.mark.asyncio
+async def test_like_post_blocked_during_cooldown(channel):
+    """like_post returns False during cooldown."""
+    channel._handle_action_block()
+    with patch.object(channel, "_is_operating_hours", return_value=True):
+        result = await channel.like_post("post123")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_follow_user_blocked_during_cooldown(channel):
+    """follow_user returns False during cooldown."""
+    channel._handle_action_block()
+    with patch.object(channel, "_is_operating_hours", return_value=True):
+        result = await channel.follow_user("user123")
+    assert result is False

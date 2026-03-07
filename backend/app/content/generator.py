@@ -119,6 +119,33 @@ class ContentGenerator:
             hashtags=INSTAGRAM_HASHTAGS[:10],
         )
 
+    async def generate_instagram_story_text(self, topic: str) -> Caption:
+        """Generate short story CTA text (body ≤50 chars)."""
+        system = self.brand_voice.get_system_prompt("instagram")
+        prompt = (
+            f"인스타그램 스토리용 짧은 텍스트를 작성하세요 (50자 이내).\n"
+            f"주제: {topic}\n"
+            "CTA 형식으로 간결하게, 스와이프 유도."
+        )
+        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        return Caption(topic=topic, body=body[:50], hashtags=[])
+
+    async def generate_instagram_reel_caption(self, topic: str) -> Caption:
+        """Generate reel caption with hashtags (body ≤2200 chars)."""
+        system = self.brand_voice.get_system_prompt("instagram")
+        prompt = (
+            f"인스타그램 릴스용 캡션을 작성하세요.\n"
+            f"주제: {topic}\n"
+            "감성적 훅 + 본론 + CTA + 해시태그 포함. 총 2200자 이내."
+        )
+        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        body = self.brand_voice.add_cta(body, "instagram")
+        return Caption(
+            topic=topic,
+            body=body[:2200],
+            hashtags=INSTAGRAM_HASHTAGS[:10],
+        )
+
     async def generate_cafe_post(
         self, topic: str, cafe_context: "str | None" = None
     ) -> CafePost:

@@ -86,6 +86,12 @@ class WeetScheduler:
             CronTrigger(hour=18, minute=0, timezone="Asia/Seoul"),
             id="lead_hunt",
         )
+        IntervalTrigger = import_module("apscheduler.triggers.interval").IntervalTrigger
+        _ = self.scheduler.add_job(
+            self._job_manual_lead_collect,
+            IntervalTrigger(minutes=5),
+            id="manual_lead_collect",
+        )
         _ = self.scheduler.add_job(
             self._job_evening_followup,
             CronTrigger(hour=21, minute=0, timezone="Asia/Seoul"),
@@ -139,7 +145,7 @@ class WeetScheduler:
 
     def _can_run_instagram_action(self) -> bool:
         hour = datetime.now(self._kst).hour
-        return 6 <= hour < 23
+        return 7 <= hour < 23
 
     async def _noop(self) -> None:
         return None
@@ -234,11 +240,55 @@ class WeetScheduler:
         bridge = OpenClawBridge()
         try:
             for channel in self.CONTENT_PUBLISH_CHANNELS:
-                result = await self._execute_openclaw_call(
-                    "content_publish",
-                    f"publish_content:{channel}",
-                    lambda c=channel: bridge.publish_content(c, content_id),
-                )
+                if channel == "instagram":
+                    # Fetch content metadata to determine format type
+                    try:
+                        sb = get_supabase()
+                        content_row = (
+                            sb.table("marketing_contents")
+                            .select("metadata,caption")
+                            .eq("content_id", content_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        metadata: dict[str, object] = {}
+                        caption = ""
+                        media_path = ""
+                        if content_row.data:
+                            raw_meta = content_row.data[0].get("metadata")
+                            metadata = raw_meta if isinstance(raw_meta, dict) else {}
+                            caption = str(content_row.data[0].get("caption") or "")
+                            media_path = str(metadata.get("media_path") or "")
+                        format_type = str(metadata.get("format_type", "feed"))
+                    except Exception:
+                        format_type = "feed"
+                        caption = ""
+
+                    if format_type == "story":
+                        operation = lambda cid=content_id, mp=media_path: (
+                            bridge.publish_instagram_story(cid, mp)
+                        )
+                    elif format_type == "reel":
+                        operation = lambda cid=content_id, cap=caption, mp=media_path: (
+                            bridge.publish_instagram_reel(cid, cap, mp)
+                        )
+                    else:
+                        operation = lambda cid=content_id, cap=caption, mp=media_path: (
+                            bridge.publish_instagram_feed(cid, cap, mp)
+                        )
+
+                    result = await self._execute_openclaw_call(
+                        "content_publish",
+                        f"publish_{format_type}:instagram",
+                        operation,
+                    )
+                else:
+                    result = await self._execute_openclaw_call(
+                        "content_publish",
+                        f"publish_content:{channel}",
+                        lambda c=channel: bridge.publish_content(c, content_id),
+                    )
+
                 success = bool(result.get("success", False))
                 if success:
                     success_count += 1
@@ -258,43 +308,71 @@ class WeetScheduler:
 
     async def _run_lead_hunt_job(self) -> None:
         if self.dry_run:
-            logger.info("DRY-RUN: would call OpenClaw for lead_hunt")
+            logger.info("DRY-RUN: would run Instagram lead hunt")
             return
 
-        lead_id = f"lead-hunt-{datetime.now(self._kst).strftime('%Y%m%d%H%M%S')}"
+        from app.channels.instagram import InstagramChannel
+
+        channel = InstagramChannel()
         bridge = OpenClawBridge()
         try:
-            result = await self._execute_openclaw_call(
-                "lead_hunt",
-                "outreach_lead",
-                lambda: bridge.outreach_lead(lead_id, "hunt"),
-            )
-            if not bool(result.get("success", False)):
-                raise RuntimeError(
-                    f"lead_hunt OpenClaw outreach failed: {result.get('content', '')}"
-                )
-            self._record_daily_metric("leads_collected", 1)
+            commenters = await channel.get_competitor_commenters()
+            likers = await channel.get_competitor_likers()
+            total_leads = commenters + likers
+
+            self._record_daily_metric("leads_collected", len(total_leads))
+
+            for lead in commenters:
+                if lead.id is None:
+                    continue
+                try:
+                    _ = await self._execute_openclaw_call(
+                        "lead_hunt",
+                        f"engage_follow:{lead.username}",
+                        lambda lid=str(lead.id): bridge.engage_instagram_follow(lid),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Follow engagement failed for %s: %s", lead.username, exc
+                    )
         finally:
             await bridge.close()
 
     async def _run_evening_followup_job(self) -> None:
         if self.dry_run:
-            logger.info("DRY-RUN: would call OpenClaw for evening_followup")
+            logger.info("DRY-RUN: would run evening followup")
             return
 
-        lead_id = f"lead-followup-{datetime.now(self._kst).strftime('%Y%m%d%H%M%S')}"
         bridge = OpenClawBridge()
         try:
-            result = await self._execute_openclaw_call(
-                "evening_followup",
-                "outreach_lead",
-                lambda: bridge.outreach_lead(lead_id, "followup"),
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_leads")
+                .select("id,username,source")
+                .eq("platform", "instagram")
+                .eq("status", "new")
+                .limit(20)
+                .execute()
             )
-            if not bool(result.get("success", False)):
-                raise RuntimeError(
-                    f"evening_followup OpenClaw outreach failed: {result.get('content', '')}"
-                )
-            self._record_daily_metric("proposals_made", 1)
+            leads: list[dict[str, Any]] = result.data or []
+
+            engagement_count = 0
+            for lead_row in leads:
+                lead_id = lead_row.get("id")
+                username = str(lead_row.get("username", "") or "")
+                if not lead_id or not username:
+                    continue
+                try:
+                    _ = await self._execute_openclaw_call(
+                        "evening_followup",
+                        f"engage_follow:{username}",
+                        lambda lid=str(lead_id): bridge.engage_instagram_follow(lid),
+                    )
+                    engagement_count += 1
+                except Exception as exc:
+                    logger.warning("Evening followup failed for %s: %s", username, exc)
+
+            self._record_daily_metric("proposals_made", engagement_count)
         finally:
             await bridge.close()
 
@@ -352,6 +430,51 @@ class WeetScheduler:
             logger.info("Skipping evening_followup outside Instagram hours")
             return
         await self._run_task("evening_followup", self._run_evening_followup_job)
+
+    def _check_manual_collect_flag(self) -> bool:
+        try:
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_settings")
+                .select("value")
+                .eq("key", "lead_collection_requested")
+                .limit(1)
+                .execute()
+            )
+            if not result.data:
+                return False
+            value = result.data[0].get("value")
+            if isinstance(value, dict):
+                return bool(value.get("requested", False))
+            return False
+        except Exception as exc:
+            logger.warning("Failed to check manual collect flag: %s", exc)
+            return False
+
+    def _clear_manual_collect_flag(self) -> None:
+        try:
+            sb = get_supabase()
+            sb.table("marketing_settings").upsert(
+                {
+                    "key": "lead_collection_requested",
+                    "value": {
+                        "requested": False,
+                        "completed_at": datetime.now(self._kst).isoformat(),
+                    },
+                }
+            ).execute()
+        except Exception as exc:
+            logger.warning("Failed to clear manual collect flag: %s", exc)
+
+    async def _job_manual_lead_collect(self) -> None:
+        if self.dry_run:
+            return
+        if not self._check_manual_collect_flag():
+            return
+        logger.info("Manual lead collection triggered via web UI")
+        await self._run_task("manual_lead_collect", self._run_lead_hunt_job)
+        self._clear_manual_collect_flag()
+        logger.info("Manual lead collection completed, flag cleared")
 
     async def _job_weekly_report(self) -> None:
         await self._run_task("weekly_report", self._noop)
