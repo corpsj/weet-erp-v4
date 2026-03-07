@@ -104,7 +104,7 @@ class LeadCandidate:
     username: str
     platform: str = "instagram"
     source: str = ""
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     id: Optional[int] = None
 
 
@@ -178,6 +178,11 @@ class InstagramChannel:
 
     async def _get_authenticated_client(self):
         """Lazy-initialize and return authenticated instagrapi Client, or None."""
+        import os
+
+        if os.environ.get("TESTING") == "1":
+            logger.warning("_get_authenticated_client blocked: TESTING=1")
+            return None
         if self._ig_client is not None:
             return self._ig_client
         try:

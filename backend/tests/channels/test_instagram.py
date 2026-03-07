@@ -340,3 +340,11 @@ async def test_follow_user_blocked_during_cooldown(channel):
     with patch.object(channel, "_is_operating_hours", return_value=True):
         result = await channel.follow_user("user123")
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_get_authenticated_client_blocked_in_testing_env(channel):
+    with patch.dict("os.environ", {"TESTING": "1"}):
+        client = await channel._get_authenticated_client()
+
+    assert client is None
