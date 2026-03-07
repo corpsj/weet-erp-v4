@@ -12,6 +12,7 @@ import type {
   SystemStatus,
   OpenClawStatus,
   LeadFilters,
+  Competitor,
 } from "@/types/marketing";
 
 export function useMarketingOverview() {
@@ -92,6 +93,60 @@ export function useOpenClawStatus() {
     queryFn: () =>
       fetchApi<OpenClawStatus>("/api/marketing/system/openclaw"),
     staleTime: 1000 * 30,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Competitors
+// ---------------------------------------------------------------------------
+
+export function useCompetitors() {
+  return useQuery({
+    queryKey: ["marketing", "competitors"],
+    queryFn: () => fetchApi<Competitor[]>("/api/marketing/competitors"),
+    staleTime: 1000 * 60,
+  });
+}
+
+export function useAddCompetitor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { username: string; displayName?: string; notes?: string }) =>
+      fetchApi<Competitor>("/api/marketing/competitors", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "competitors"] });
+    },
+  });
+}
+
+export function useUpdateCompetitor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { username: string; displayName?: string; notes?: string; isActive?: boolean }) =>
+      fetchApi<Competitor>("/api/marketing/competitors", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "competitors"] });
+    },
+  });
+}
+
+export function useDeleteCompetitor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) =>
+      fetchApi<{ deleted: string }>("/api/marketing/competitors", {
+        method: "DELETE",
+        body: JSON.stringify({ username }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "competitors"] });
+    },
   });
 }
 
