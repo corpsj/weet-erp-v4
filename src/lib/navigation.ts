@@ -82,12 +82,12 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
   {
     label: "마케팅",
     items: [
-      { key: "marketing-overview", label: "개요", href: "/marketing", icon: LayoutDashboard },
-      { key: "marketing-leads", label: "리드", href: "/marketing/leads", icon: Users },
-      { key: "marketing-proposals", label: "제안", href: "/marketing/proposals", icon: Lightbulb },
-      { key: "marketing-content", label: "콘텐츠", href: "/marketing/content", icon: FileText },
-      { key: "marketing-signals", label: "신호", href: "/marketing/signals", icon: Radio },
-      { key: "marketing-system", label: "시스템", href: "/marketing/system", icon: Settings },
+      { key: "marketing-overview", label: "대시보드", href: "/marketing", icon: LayoutDashboard },
+      { key: "marketing-leads", label: "잠재고객", href: "/marketing/leads", icon: Users },
+      { key: "marketing-proposals", label: "승인 대기", href: "/marketing/proposals", icon: Lightbulb },
+      { key: "marketing-content", label: "게시물", href: "/marketing/content", icon: FileText },
+      { key: "marketing-signals", label: "트렌드", href: "/marketing/signals", icon: Radio },
+      { key: "marketing-system", label: "운영 현황", href: "/marketing/system", icon: Settings },
     ],
   },
 ];

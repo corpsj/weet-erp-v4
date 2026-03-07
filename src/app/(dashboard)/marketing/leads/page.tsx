@@ -26,9 +26,9 @@ const SORT_OPTIONS = [
 export default function LeadsPage() {
   return (
     <ModuleShell
-      title="수집된 리드"
-      description="플랫폼에서 수집된 잠재 고객 목록입니다."
-      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "리드" }]}
+      title="잠재고객 관리"
+      description="플랫폼에서 수집된 잠재고객 목록입니다."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "잠재고객" }]}
     >
       <LeadsContent />
     </ModuleShell>
@@ -102,7 +102,7 @@ function LeadsContent() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="리드 검색..."
+              placeholder="잠재고객 검색..."
               className="pl-9"
             />
           </div>
@@ -143,7 +143,7 @@ function LeadsContent() {
         </div>
       </div>
 
-      <p className="text-sm text-[#9a9a9a]">{filteredLeads.length}개의 리드</p>
+      <p className="text-sm text-[#9a9a9a]">{filteredLeads.length}명의 잠재고객</p>
 
       {isLoading ? (
         <div className="animate-pulse space-y-4 rounded-md border border-[#2a2a2a] bg-[#141414] p-8">
@@ -154,7 +154,7 @@ function LeadsContent() {
         </div>
       ) : isError ? (
         <Card className="mt-4 p-6">
-          <p className="text-sm text-[var(--color-danger)]">리드 데이터를 불러오지 못했습니다.</p>
+          <p className="text-sm text-[var(--color-danger)]">잠재고객 데이터를 불러오지 못했습니다.</p>
           <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
             다시 시도
           </Button>
@@ -169,7 +169,7 @@ function LeadsContent() {
         />
       )}
 
-      <Modal open={selectedLead !== null} onClose={() => setSelectedLead(null)} title="리드 상세">
+      <Modal open={selectedLead !== null} onClose={() => setSelectedLead(null)} title="잠재고객 상세">
         {selectedLead && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">

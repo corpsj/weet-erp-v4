@@ -20,9 +20,9 @@ const URGENCY_TABS = [
 export default function SignalsPage() {
   return (
     <ModuleShell
-      title="시장 신호"
-      description="Market Radar가 감지한 업계 동향과 신호입니다."
-      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "신호" }]}
+      title="시장 트렌드"
+      description="Market Radar가 감지한 업계 동향과 트렌드입니다."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "트렌드" }]}
     >
       <SignalsContent />
     </ModuleShell>
@@ -100,7 +100,7 @@ function SignalsContent() {
             </div>
           ) : isError ? (
             <Card className="mt-4 p-6">
-              <p className="text-sm text-[var(--color-danger)]">시장 신호 데이터를 불러오지 못했습니다.</p>
+              <p className="text-sm text-[var(--color-danger)]">시장 트렌드 데이터를 불러오지 못했습니다.</p>
               <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
                 다시 시도
               </Button>
@@ -133,9 +133,9 @@ function SignalsContent() {
           </div>
 
           <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-6 space-y-3">
-            <h2 className="text-lg font-bold text-[#ffffff]">신호 분석 요약</h2>
+            <h2 className="text-lg font-bold text-[#ffffff]">트렌드 분석 요약</h2>
             <p className="text-sm text-[#9a9a9a] leading-relaxed">
-              총 {signals.length}건의 신호 · 긴급 {criticalCount}건 · 높음 {highCount}건
+              총 {signals.length}건 · 긴급 {criticalCount}건 · 높음 {highCount}건
             </p>
             <Button variant="outline" size="sm" disabled className="w-full opacity-50">
               상세 보고서 (곧 출시)

@@ -11,9 +11,9 @@ import { Bot, Play, Zap } from "lucide-react";
 export default function SystemPage() {
   return (
     <ModuleShell
-      title="시스템 상태"
-      description="서버 및 API 연결 상태를 확인하고 제어합니다."
-      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "시스템" }]}
+      title="운영 현황"
+      description="자동화 서비스 상태를 확인하고 제어합니다."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "운영 현황" }]}
     >
       <SystemContent />
     </ModuleShell>
@@ -49,7 +49,7 @@ function SystemContent() {
         </div>
       ) : isError ? (
         <Card className="mt-4 p-6">
-          <p className="text-sm text-[var(--color-danger)]">시스템 상태 데이터를 불러오지 못했습니다.</p>
+          <p className="text-sm text-[var(--color-danger)]">운영 현황 데이터를 불러오지 못했습니다.</p>
           <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
             다시 시도
           </Button>
@@ -74,7 +74,7 @@ function SystemContent() {
 
           <Card className="flex h-48 flex-col justify-between">
             <div className="flex justify-between items-start">
-              <h3 className="font-medium text-[#9a9a9a]">Ollama API</h3>
+              <h3 className="font-medium text-[#9a9a9a]">LMStudio</h3>
               <Badge tone={ollamaConnected ? "brand" : "danger"}>
                 {ollamaConnected ? "ONLINE" : "OFFLINE"}
               </Badge>

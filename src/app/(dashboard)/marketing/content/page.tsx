@@ -15,9 +15,9 @@ const CHANNELS = ["블로그", "인스타그램", "카페", "유튜브", "당근
 export default function ContentPage() {
   return (
     <ModuleShell
-      title="발행 콘텐츠"
-      description="다양한 채널에 배포된 마케팅 콘텐츠입니다."
-      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "콘텐츠" }]}
+      title="게시물 관리"
+      description="다양한 채널에 배포된 마케팅 게시물입니다."
+      breadcrumb={[{ label: "마케팅", href: "/marketing" }, { label: "게시물" }]}
     >
       <ContentPageBody />
     </ModuleShell>
@@ -127,7 +127,7 @@ function ContentPageBody() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm text-[#9a9a9a]">{filteredContents.length}개의 콘텐츠</p>
+          <p className="text-sm text-[#9a9a9a]">{filteredContents.length}개의 게시물</p>
           <Button variant="outline" size="sm" onClick={exportContentCsv}>
             <Download className="mr-1 h-4 w-4" /> CSV
           </Button>
@@ -157,7 +157,7 @@ function ContentPageBody() {
         </div>
       ) : isError ? (
         <Card className="mt-4 p-6">
-          <p className="text-sm text-[var(--color-danger)]">콘텐츠 데이터를 불러오지 못했습니다.</p>
+          <p className="text-sm text-[var(--color-danger)]">게시물 데이터를 불러오지 못했습니다.</p>
           <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
             다시 시도
           </Button>
@@ -165,7 +165,7 @@ function ContentPageBody() {
       ) : filteredContents.length === 0 ? (
         <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-12 text-center">
           <p className="text-[#9a9a9a] text-lg">
-            {activeChannel === "전체" ? "콘텐츠가 없습니다." : `'${activeChannel}' 채널의 콘텐츠가 없습니다.`}
+            {activeChannel === "전체" ? "게시물이 없습니다." : `'${activeChannel}' 채널의 게시물이 없습니다.`}
           </p>
         </div>
       ) : (

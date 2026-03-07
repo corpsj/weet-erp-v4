@@ -41,17 +41,17 @@ const PIPELINE_STAGE_IDS = [
 type MetricType = "leadsCollected" | "proposalsMade" | "contentsPublished";
 
 const METRIC_LABELS: Record<MetricType, string> = {
-  leadsCollected: "리드 수집",
-  proposalsMade: "제안 생성",
-  contentsPublished: "콘텐츠 발행",
+  leadsCollected: "잠재고객 수집",
+  proposalsMade: "승인 대기 생성",
+  contentsPublished: "게시물 발행",
 };
 
 export default function MarketingOverviewPage() {
   return (
     <ModuleShell
-      title="마케팅 개요"
+      title="마케팅 대시보드"
       description="WEET Director의 현재 마케팅 현황입니다."
-      breadcrumb={[{ label: "마케팅" }, { label: "개요" }]}
+      breadcrumb={[{ label: "마케팅" }, { label: "대시보드" }]}
     >
       <MarketingOverviewContent />
     </ModuleShell>
@@ -185,19 +185,19 @@ function MarketingOverviewContent() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="총 리드"
+          title="잠재고객"
           value={safeOverview.totalLeads}
           icon={Users}
           change={safeOverview.trends.leadsChange}
         />
         <MetricCard
-          title="대기 중 제안"
+          title="승인 대기"
           value={safeOverview.pendingProposals}
           icon={Lightbulb}
           change={safeOverview.trends.proposalsChange}
         />
         <MetricCard
-          title="발행된 콘텐츠"
+          title="게시물"
           value={safeOverview.publishedContent}
           icon={FileText}
           change={safeOverview.trends.contentChange}
@@ -261,7 +261,7 @@ function MarketingOverviewContent() {
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-lg font-bold text-[#ffffff]">리드 파이프라인</h2>
+          <h2 className="mb-4 text-lg font-bold text-[#ffffff]">고객 여정</h2>
           <div className="space-y-3">
             {stageCounts.map((stage) => {
               const widthRatio =
@@ -324,7 +324,7 @@ function MarketingOverviewContent() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#ffffff]">최근 제안</h2>
+            <h2 className="text-lg font-bold text-[#ffffff]">최근 승인 대기</h2>
             <Link
               href="/marketing/proposals"
               className="text-sm font-medium text-[#9a9a9a] transition-colors hover:text-[#ffffff]"
@@ -334,7 +334,7 @@ function MarketingOverviewContent() {
           </div>
           {recentProposals.length === 0 ? (
             <div className="rounded-md border border-[#2a2a2a] bg-[#0a0a0a] p-8 text-center text-[#9a9a9a]">
-              제안 내역이 없습니다.
+              승인 대기 내역이 없습니다.
             </div>
           ) : (
             <div className="grid gap-4">
@@ -352,7 +352,7 @@ function MarketingOverviewContent() {
 
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#ffffff]">최근 리드</h2>
+            <h2 className="text-lg font-bold text-[#ffffff]">최근 잠재고객</h2>
             <Link
               href="/marketing/leads"
               className="text-sm font-medium text-[#9a9a9a] transition-colors hover:text-[#ffffff]"
