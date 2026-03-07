@@ -25,14 +25,6 @@ class YouTubeConfig(BaseModel):
     api_key: str
 
 
-class DiscordConfig(BaseModel):
-    """Discord webhook and bot configuration."""
-
-    webhook_url: str = ""
-    bot_token: str = ""
-    channel_id: str = "1474571842772537585"
-
-
 class InstagramConfig(BaseModel):
     """Instagram account configuration."""
 
@@ -67,7 +59,6 @@ class Settings(BaseSettings):
     lmstudio: LMStudioConfig = LMStudioConfig()
     naver: NaverConfig = NaverConfig(client_id="", client_secret="")
     youtube: YouTubeConfig = YouTubeConfig(api_key="")
-    discord: DiscordConfig = DiscordConfig()
     instagram: InstagramConfig = InstagramConfig()
     scheduler: SchedulerConfig = SchedulerConfig()
     openclaw: OpenClawSettings = OpenClawSettings()

@@ -13,7 +13,6 @@ def env_setup(tmp_path):
         "NAVER__CLIENT_ID=test_naver_id\n"
         "NAVER__CLIENT_SECRET=test_naver_secret\n"
         "YOUTUBE__API_KEY=test_yt_key\n"
-        "DISCORD__WEBHOOK_URL=https://discord.com/api/webhooks/placeholder\n"
     )
 
     # Change to temp directory so Settings finds .env
@@ -41,12 +40,6 @@ def test_scheduler_daily_likes_limit(env_setup):
     assert settings.scheduler.daily_likes_limit == 150
 
 
-def test_discord_channel_id(env_setup):
-    """Test that discord.channel_id equals '1474571842772537585'."""
-    settings = Settings()
-    assert settings.discord.channel_id == "1474571842772537585"
-
-
 def test_naver_config_from_env(env_setup):
     """Test that Naver config loads from environment variables."""
     settings = Settings()
@@ -58,14 +51,6 @@ def test_youtube_config_from_env(env_setup):
     """Test that YouTube config loads from environment variables."""
     settings = Settings()
     assert settings.youtube.api_key == "test_yt_key"
-
-
-def test_discord_webhook_from_env(env_setup):
-    """Test that Discord webhook URL loads from environment variables."""
-    settings = Settings()
-    assert (
-        settings.discord.webhook_url == "https://discord.com/api/webhooks/placeholder"
-    )
 
 
 def test_scheduler_defaults(env_setup):
