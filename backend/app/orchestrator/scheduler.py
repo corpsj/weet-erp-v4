@@ -240,43 +240,69 @@ class WeetScheduler:
 
     async def _run_lead_hunt_job(self) -> None:
         if self.dry_run:
-            logger.info("DRY-RUN: would call OpenClaw for lead_hunt")
+            logger.info("DRY-RUN: would run Instagram lead hunt")
             return
 
-        lead_id = f"lead-hunt-{datetime.now(self._kst).strftime('%Y%m%d%H%M%S')}"
+        from app.channels.instagram import InstagramChannel
+
+        channel = InstagramChannel()
         bridge = OpenClawBridge()
         try:
-            result = await self._execute_openclaw_call(
-                "lead_hunt",
-                "outreach_lead",
-                lambda: bridge.outreach_lead(lead_id, "hunt"),
-            )
-            if not bool(result.get("success", False)):
-                raise RuntimeError(
-                    f"lead_hunt OpenClaw outreach failed: {result.get('content', '')}"
-                )
-            self._record_daily_metric("leads_collected", 1)
+            commenters = await channel.get_competitor_commenters()
+            likers = await channel.get_competitor_likers()
+            hashtag_users = await channel.get_hashtag_users()
+            total_leads = commenters + likers + hashtag_users
+
+            self._record_daily_metric("leads_collected", len(total_leads))
+
+            for lead in commenters:
+                try:
+                    _ = await self._execute_openclaw_call(
+                        "lead_hunt",
+                        f"engage_follow:{lead.username}",
+                        lambda u=lead.username: bridge.engage_instagram_follow(u),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Follow engagement failed for %s: %s", lead.username, exc
+                    )
         finally:
             await bridge.close()
 
     async def _run_evening_followup_job(self) -> None:
         if self.dry_run:
-            logger.info("DRY-RUN: would call OpenClaw for evening_followup")
+            logger.info("DRY-RUN: would run evening followup")
             return
 
-        lead_id = f"lead-followup-{datetime.now(self._kst).strftime('%Y%m%d%H%M%S')}"
         bridge = OpenClawBridge()
         try:
-            result = await self._execute_openclaw_call(
-                "evening_followup",
-                "outreach_lead",
-                lambda: bridge.outreach_lead(lead_id, "followup"),
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_leads")
+                .select("username,source")
+                .eq("platform", "instagram")
+                .eq("status", "new")
+                .limit(20)
+                .execute()
             )
-            if not bool(result.get("success", False)):
-                raise RuntimeError(
-                    f"evening_followup OpenClaw outreach failed: {result.get('content', '')}"
-                )
-            self._record_daily_metric("proposals_made", 1)
+            leads: list[dict[str, Any]] = result.data or []
+
+            engagement_count = 0
+            for lead_row in leads:
+                username = str(lead_row.get("username", "") or "")
+                if not username:
+                    continue
+                try:
+                    _ = await self._execute_openclaw_call(
+                        "evening_followup",
+                        f"engage_follow:{username}",
+                        lambda u=username: bridge.engage_instagram_follow(u),
+                    )
+                    engagement_count += 1
+                except Exception as exc:
+                    logger.warning("Evening followup failed for %s: %s", username, exc)
+
+            self._record_daily_metric("proposals_made", engagement_count)
         finally:
             await bridge.close()
 

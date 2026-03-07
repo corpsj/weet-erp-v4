@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.clients.instagram_client import InstagrapiClient
@@ -105,11 +105,33 @@ class InstagramChannel:
         self._session_cookie: Optional[str] = None  # instagrapi session reuse
         self._instagrapi_wrapper: Optional[InstagrapiClient] = None
         self._ig_client = None
+        self._cooldown_until: Optional[datetime] = None
 
     def _is_operating_hours(self) -> bool:
         """Check if within KST operating hours (07:00-23:00)."""
         kst_hour = (datetime.now(timezone.utc).hour + 9) % 24
         return OPERATING_HOURS_START <= kst_hour < OPERATING_HOURS_END
+
+    def _is_in_cooldown(self) -> bool:
+        """Check if currently in action block cooldown period."""
+        if self._cooldown_until is None:
+            return False
+        return datetime.now(timezone.utc) < self._cooldown_until
+
+    def _handle_action_block(self) -> None:
+        """Handle Instagram action block: set 24h cooldown + Discord alert."""
+        self._cooldown_until = datetime.now(timezone.utc) + timedelta(hours=24)
+        logger.error(
+            "Instagram ACTION_BLOCK detected. Cooldown until %s",
+            self._cooldown_until,
+        )
+        try:
+            self.discord.send_alert(
+                "error",
+                f"Instagram 액션 블록 감지! 24시간 쿨다운 시작. 종료: {self._cooldown_until}",
+            )
+        except Exception as exc:
+            logger.warning("Failed to send Discord alert for action block: %s", exc)
 
     def _random_delay(self) -> float:
         """Return random delay between MIN_DELAY and MAX_DELAY seconds."""
@@ -156,6 +178,9 @@ class InstagramChannel:
         if not self._is_operating_hours():
             logger.info("Outside operating hours, skipping competitor commenters")
             return []
+        if self._is_in_cooldown():
+            logger.info("Skipping lead collection: in action block cooldown")
+            return []
 
         client = self._get_authenticated_client()
         if client is None:
@@ -193,13 +218,28 @@ class InstagramChannel:
                             await self.save_lead_to_db(lead)
                             leads.append(lead)
                     except Exception as exc:
+                        exc_text = str(exc).lower()
+                        if (
+                            "action_block" in exc_text
+                            or "action blocked" in exc_text
+                            or "temporarily blocked" in exc_text
+                        ):
+                            self._handle_action_block()
+                            return leads
                         logger.error(
                             "Error fetching comments for media %s: %s", media.pk, exc
                         )
                         continue
             except Exception as exc:
                 exc_text = str(exc).lower()
-                if "private" in exc_text:
+                if (
+                    "action_block" in exc_text
+                    or "action blocked" in exc_text
+                    or "temporarily blocked" in exc_text
+                ):
+                    self._handle_action_block()
+                    return leads
+                elif "private" in exc_text:
                     logger.warning("Competitor %s is private, skipping", competitor)
                 elif "not found" in exc_text or "doesn't exist" in exc_text:
                     logger.warning("Competitor %s not found, skipping", competitor)
@@ -217,6 +257,9 @@ class InstagramChannel:
         """Collect leads from competitor's post likers via instagrapi."""
         if not self._is_operating_hours():
             logger.info("Outside operating hours, skipping competitor likers")
+            return []
+        if self._is_in_cooldown():
+            logger.info("Skipping lead collection: in action block cooldown")
             return []
 
         client = self._get_authenticated_client()
@@ -254,13 +297,28 @@ class InstagramChannel:
                             await self.save_lead_to_db(lead)
                             leads.append(lead)
                     except Exception as exc:
+                        exc_text = str(exc).lower()
+                        if (
+                            "action_block" in exc_text
+                            or "action blocked" in exc_text
+                            or "temporarily blocked" in exc_text
+                        ):
+                            self._handle_action_block()
+                            return leads
                         logger.error(
                             "Error fetching likers for media %s: %s", media.pk, exc
                         )
                         continue
             except Exception as exc:
                 exc_text = str(exc).lower()
-                if "private" in exc_text:
+                if (
+                    "action_block" in exc_text
+                    or "action blocked" in exc_text
+                    or "temporarily blocked" in exc_text
+                ):
+                    self._handle_action_block()
+                    return leads
+                elif "private" in exc_text:
                     logger.warning("Competitor %s is private, skipping", competitor)
                 elif "not found" in exc_text or "doesn't exist" in exc_text:
                     logger.warning("Competitor %s not found, skipping", competitor)
@@ -276,6 +334,9 @@ class InstagramChannel:
         """Collect leads from hashtag recent posts via instagrapi."""
         if not self._is_operating_hours():
             logger.info("Outside operating hours, skipping hashtag users")
+            return []
+        if self._is_in_cooldown():
+            logger.info("Skipping lead collection: in action block cooldown")
             return []
 
         client = self._get_authenticated_client()
@@ -317,7 +378,14 @@ class InstagramChannel:
                     leads.append(lead)
             except Exception as exc:
                 exc_text = str(exc).lower()
-                if "restricted" in exc_text or "blocked" in exc_text:
+                if (
+                    "action_block" in exc_text
+                    or "action blocked" in exc_text
+                    or "temporarily blocked" in exc_text
+                ):
+                    self._handle_action_block()
+                    return leads
+                elif "restricted" in exc_text or "blocked" in exc_text:
                     logger.warning("Hashtag '%s' is restricted, skipping", tag)
                 else:
                     logger.error(
@@ -331,6 +399,9 @@ class InstagramChannel:
         """Like a post with rate limit and delay check."""
         if not self._is_operating_hours():
             return False
+        if self._is_in_cooldown():
+            logger.info("Skipping like_post: in action block cooldown")
+            return False
         try:
             self.limit_tracker.record("likes")
         except RuntimeError:
@@ -341,6 +412,9 @@ class InstagramChannel:
     async def follow_user(self, user_id: str) -> bool:
         """Follow a user with rate limit and delay check."""
         if not self._is_operating_hours():
+            return False
+        if self._is_in_cooldown():
+            logger.info("Skipping follow_user: in action block cooldown")
             return False
         try:
             self.limit_tracker.record("follows")
