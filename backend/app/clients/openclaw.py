@@ -20,6 +20,26 @@ class AgentResponseLike(Protocol):
     content: str
 
 
+_SKILLS_DIR = "/Users/zoopark-studio/.openclaw/workspace-marketing/skills"
+
+_INSTAGRAM_POSTER_INSTRUCTIONS = (
+    "Read and follow the SKILL.md at "
+    f"{_SKILLS_DIR}/instagram-poster/SKILL.md. "
+    "Use the browser tool (profile: marketing, port 18801) to post to Instagram. "
+    "Fetch content from Supabase, navigate instagram.com, upload and share. "
+    "Wait 30-90s before clicking Share. Check rate limits first (max 3/day). "
+)
+
+_LEAD_OUTREACH_INSTRUCTIONS = (
+    "Read and follow the SKILL.md at "
+    f"{_SKILLS_DIR}/lead-outreach/SKILL.md. "
+    "Use the browser tool (profile: marketing, port 18801) for Instagram actions. "
+    "Fetch the lead from Supabase by lead_id, navigate to their Instagram profile, "
+    "then perform the action. Wait 30-90s between actions. "
+    "Check rate limits and operating hours first. "
+)
+
+
 class OpenClawBridge:
     MAX_RETRIES: ClassVar[int] = 3
     TIMEOUT_SECONDS: ClassVar[int] = 120
@@ -105,19 +125,29 @@ class OpenClawBridge:
             "raw": self._serialize(response),
         }
 
-    async def publish_content(self, channel: str, content_id: str) -> dict[str, object]:
-        prompt = (
-            "Publish the requested content via configured channel. "
-            f"channel={channel}, content_id={content_id}. "
-            "Return concise execution result as JSON."
-        )
+    async def publish_content(
+        self, channel: str, content_id: str, image_path: str = ""
+    ) -> dict[str, object]:
+        if channel == "instagram":
+            prompt = (
+                _INSTAGRAM_POSTER_INSTRUCTIONS
+                + f"Parameters: content_id={content_id}"
+                + (f", image_path={image_path}" if image_path else "")
+                + ". Return the result as JSON."
+            )
+        else:
+            prompt = (
+                f"Publish content via {channel} channel. "
+                f"content_id={content_id}. "
+                "Return concise execution result as JSON."
+            )
         return await self._execute_marketing_prompt(prompt)
 
     async def outreach_lead(self, lead_id: str, action_type: str) -> dict[str, object]:
         prompt = (
-            "Execute lead outreach action. "
-            f"lead_id={lead_id}, action_type={action_type}. "
-            "Return concise execution result as JSON."
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type={action_type}. "
+            "Return the result as JSON."
         )
         return await self._execute_marketing_prompt(prompt)
 
@@ -129,102 +159,63 @@ class OpenClawBridge:
         )
         return await self._execute_marketing_prompt(prompt)
 
-    # --- Instagram Content Publishing ---
+    # --- Instagram Content Publishing (via instagram-poster skill) ---
 
     async def publish_instagram_feed(
         self, content_id: str, caption: str, image_path: str
     ) -> dict[str, object]:
-        """Publish an Instagram feed post via OpenClaw."""
-        prompt = (
-            "Publish Instagram feed post. "
-            f"content_id={content_id}, "
-            f"caption={caption[:100]}..., "
-            f"image_path={image_path}. "
-            "Format: square or portrait image with caption. "
-            "Max caption length: 2200 chars. Include relevant hashtags. "
-            "CTA: 인스타그램: @weet_kr. "
-            "Return JSON with post_id on success."
+        """Publish an Instagram feed post via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=image_path
         )
-        return await self._execute_marketing_prompt(prompt)
 
     async def publish_instagram_story(
         self, content_id: str, media_path: str
     ) -> dict[str, object]:
-        """Publish an Instagram story via OpenClaw."""
-        prompt = (
-            "Publish Instagram story. "
-            f"content_id={content_id}, "
-            f"media_path={media_path}. "
-            "Format: vertical 9:16 image or video (max 15s). "
-            "Add subtle CTA sticker if appropriate. "
-            "Return JSON with story_id on success."
+        """Publish an Instagram story via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=media_path
         )
-        return await self._execute_marketing_prompt(prompt)
 
     async def publish_instagram_reel(
         self, content_id: str, caption: str, video_path: str
     ) -> dict[str, object]:
-        """Publish an Instagram reel via OpenClaw."""
-        prompt = (
-            "Publish Instagram reel. "
-            f"content_id={content_id}, "
-            f"caption={caption[:100]}..., "
-            f"video_path={video_path}. "
-            "Format: vertical 9:16 video, 15-90 seconds. "
-            "Max caption: 2200 chars with hashtags. "
-            "CTA: 인스타그램: @weet_kr. "
-            "Return JSON with reel_id on success."
+        """Publish an Instagram reel via instagram-poster skill."""
+        return await self.publish_content(
+            channel="instagram", content_id=content_id, image_path=video_path
         )
-        return await self._execute_marketing_prompt(prompt)
 
-    # --- Instagram Engagement Delegation ---
+    # --- Instagram Engagement (via lead-outreach skill) ---
 
-    async def engage_instagram_like(self, media_id: str) -> dict[str, object]:
-        """Delegate Instagram like action to OpenClaw."""
-        prompt = (
-            "Execute Instagram engagement: like post. "
-            f"media_id={media_id}. "
-            "Like the specified post naturally. "
-            "Return JSON with success status."
-        )
-        return await self._execute_marketing_prompt(prompt)
+    async def engage_instagram_like(self, lead_id: str) -> dict[str, object]:
+        """Like the most recent post of a lead via lead-outreach skill."""
+        return await self.outreach_lead(lead_id=lead_id, action_type="like")
 
-    async def engage_instagram_follow(self, username: str) -> dict[str, object]:
-        """Delegate Instagram follow action to OpenClaw."""
-        prompt = (
-            "Execute Instagram engagement: follow user. "
-            f"username={username}. "
-            "Follow the user naturally. "
-            "Return JSON with success status."
-        )
-        return await self._execute_marketing_prompt(prompt)
+    async def engage_instagram_follow(self, lead_id: str) -> dict[str, object]:
+        """Follow a lead on Instagram via lead-outreach skill."""
+        return await self.outreach_lead(lead_id=lead_id, action_type="follow")
 
     async def engage_instagram_comment(
-        self, media_id: str, comment_text: str
+        self, lead_id: str, comment_text: str
     ) -> dict[str, object]:
-        """Delegate Instagram comment action to OpenClaw."""
         prompt = (
-            "Execute Instagram engagement: comment on post. "
-            f"media_id={media_id}. "
-            f"Comment text: {comment_text}. "
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type=comment. "
+            f"Navigate to the lead's profile, find their latest post, "
+            f"and leave this comment: {comment_text}. "
             "Brand tone: 친근하고 전문적, 과장 없음, 실용 정보 중심. "
-            "금지어: 최저가, 가장 싸, 제일 저렴, 100% 보장, 절대, 무조건, 최고의. "
-            "Return JSON with comment_id on success."
+            "Return the result as JSON."
         )
         return await self._execute_marketing_prompt(prompt)
 
     async def engage_instagram_dm(
-        self, username: str, message: str
+        self, lead_id: str, message: str
     ) -> dict[str, object]:
-        """Delegate Instagram DM action to OpenClaw."""
         prompt = (
-            "Execute Instagram engagement: send direct message. "
-            f"username={username}. "
-            f"Message: {message}. "
-            "Brand tone: 친근하고 전문적, 과장 없음. "
-            "Company: (주)위트, 슬로건: '집, 다시 생각하다'. "
-            "금지어: 최저가, 가장 싸, 제일 저렴, 100% 보장. "
-            "Return JSON with message_id on success."
+            _LEAD_OUTREACH_INSTRUCTIONS
+            + f"Parameters: lead_id={lead_id}, action_type=dm. "
+            f"DM message to send: {message}. "
+            "Return the result as JSON."
         )
         return await self._execute_marketing_prompt(prompt)
 

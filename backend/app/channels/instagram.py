@@ -88,6 +88,7 @@ class LeadCandidate:
     platform: str = "instagram"
     source: str = ""
     metadata: dict = field(default_factory=dict)
+    id: Optional[int] = None
 
 
 class InstagramChannel:
@@ -466,9 +467,12 @@ class InstagramChannel:
         if existing.data and len(existing.data) > 0:
             lead_id = existing.data[0].get("id")
             sb.table("marketing_leads").update(payload).eq("id", lead_id).execute()
+            candidate.id = lead_id
             return lead_id
         else:
             result = sb.table("marketing_leads").insert(payload).execute()
             if result.data and len(result.data) > 0:
-                return result.data[0].get("id")
+                lead_id = result.data[0].get("id")
+                candidate.id = lead_id
+                return lead_id
             return None

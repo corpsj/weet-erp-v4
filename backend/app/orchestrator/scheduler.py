@@ -300,11 +300,13 @@ class WeetScheduler:
             self._record_daily_metric("leads_collected", len(total_leads))
 
             for lead in commenters:
+                if lead.id is None:
+                    continue
                 try:
                     _ = await self._execute_openclaw_call(
                         "lead_hunt",
                         f"engage_follow:{lead.username}",
-                        lambda u=lead.username: bridge.engage_instagram_follow(u),
+                        lambda lid=str(lead.id): bridge.engage_instagram_follow(lid),
                     )
                 except Exception as exc:
                     logger.warning(
@@ -323,7 +325,7 @@ class WeetScheduler:
             sb = get_supabase()
             result = (
                 sb.table("marketing_leads")
-                .select("username,source")
+                .select("id,username,source")
                 .eq("platform", "instagram")
                 .eq("status", "new")
                 .limit(20)
@@ -333,14 +335,15 @@ class WeetScheduler:
 
             engagement_count = 0
             for lead_row in leads:
+                lead_id = lead_row.get("id")
                 username = str(lead_row.get("username", "") or "")
-                if not username:
+                if not lead_id or not username:
                     continue
                 try:
                     _ = await self._execute_openclaw_call(
                         "evening_followup",
                         f"engage_follow:{username}",
-                        lambda u=username: bridge.engage_instagram_follow(u),
+                        lambda lid=str(lead_id): bridge.engage_instagram_follow(lid),
                     )
                     engagement_count += 1
                 except Exception as exc:

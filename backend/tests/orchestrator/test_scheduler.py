@@ -186,8 +186,8 @@ async def test_evening_followup_uses_engagement(scheduler):
 
     mock_sb = MagicMock()
     mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
-        {"username": "귀촌유저1", "source": "competitor_comment"},
-        {"username": "귀촌유저2", "source": "hashtag"},
+        {"id": 101, "username": "귀촌유저1", "source": "competitor_comment"},
+        {"id": 102, "username": "귀촌유저2", "source": "hashtag"},
     ]
 
     with (
