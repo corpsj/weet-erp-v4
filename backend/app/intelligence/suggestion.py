@@ -1,0 +1,274 @@
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Optional, cast
+
+from app.core.discord_bot import DiscordBot
+from app.core.llm import LLMService
+from app.core.prompts import SUGGESTION_PROMPT
+from app.db.models import DailyMetric, Lead, MarketSignal, Proposal
+from app.db.session import AsyncSessionLocal
+
+ACTION_TYPES = ["content", "outreach", "strategy", "urgent", "calendar"]
+
+
+@dataclass
+class ProposalData:
+    title: str
+    action_type: str
+    rationale: str
+    content_draft: str = ""
+    urgency: str = "medium"
+    expected_impact: str = ""
+    signal_id: Optional[int] = None
+
+
+class SuggestionEngine:
+    def __init__(self):
+        self.llm = LLMService()
+        self.discord = DiscordBot()
+
+    async def generate_suggestions(self, max_proposals: int = 3) -> list[ProposalData]:
+        signals = await self._get_recent_signals(limit=10)
+        lead_count = await self._get_lead_count()
+        metrics = await self._get_recent_metrics()
+
+        if not signals and lead_count == 0:
+            return [
+                ProposalData(
+                    title="시장 모니터링 시작 — 리드 수집 전략 수립",
+                    action_type="strategy",
+                    rationale="현재 시장 데이터가 부족합니다. 키워드 스캔을 시작하고 초기 콘텐츠를 생성하세요.",
+                    urgency="medium",
+                    expected_impact="브랜드 노출 시작",
+                )
+            ]
+
+        signals_text = "\n".join(
+            [f"- [{s['source']}] {s['title']}: {s['summary']}" for s in signals[:5]]
+        )
+        prompt = SUGGESTION_PROMPT.format(
+            signals=signals_text or "수집된 신호 없음",
+            lead_count=lead_count,
+            metrics=str(metrics),
+        )
+
+        try:
+            result = self.llm.analyze(prompt, "marketing proposal generation")
+            if isinstance(result, list):
+                proposals = result[:max_proposals]
+            elif isinstance(result, dict):
+                proposals = [result]
+            else:
+                proposals = []
+        except Exception:
+            proposals = []
+
+        output: list[ProposalData] = []
+        seen_titles: set[str] = set()
+
+        for item in proposals:
+            if not isinstance(item, dict):
+                continue
+
+            title = item.get("title", "마케팅 제안")
+            if title in seen_titles:
+                continue
+
+            seen_titles.add(title)
+            action_type = item.get("action_type", "content")
+            if action_type not in ACTION_TYPES:
+                action_type = "content"
+
+            output.append(
+                ProposalData(
+                    title=title,
+                    action_type=action_type,
+                    rationale=item.get("rationale", ""),
+                    content_draft=item.get("content_draft", ""),
+                    urgency=item.get("urgency", "medium"),
+                    expected_impact=item.get("expected_impact", ""),
+                )
+            )
+
+        if not output:
+            output.append(
+                ProposalData(
+                    title="콘텐츠 마케팅 강화 제안",
+                    action_type="content",
+                    rationale="이동식주택 관련 콘텐츠 생성으로 SEO와 브랜드 인지도를 높이세요.",
+                    urgency="medium",
+                    expected_impact="월 방문자 +20%",
+                )
+            )
+
+        return output[:max_proposals]
+
+    async def propose(self, proposal: ProposalData) -> Optional[int]:
+        if await self._is_duplicate(proposal.title):
+            return None
+
+        proposal_id = await self._save_proposal(proposal)
+        self.discord.send_proposal(
+            {
+                "title": proposal.title,
+                "signal": proposal.rationale,
+                "action": proposal.action_type,
+                "urgency": proposal.urgency,
+                "impact": proposal.expected_impact,
+                "content_draft": proposal.content_draft,
+            }
+        )
+        return proposal_id
+
+    async def handle_response(
+        self,
+        proposal_id: int,
+        action: str,
+        feedback: Optional[str] = None,
+    ) -> bool:
+        async with AsyncSessionLocal() as session:
+            proposal = await session.get(Proposal, proposal_id)
+            if not proposal:
+                return False
+
+            proposal_obj = cast(Any, proposal)
+
+            if action == "approved":
+                proposal_obj.status = "approved"
+                proposal_obj.approved_at = datetime.utcnow()
+                self.discord.send_message(f"✅ 제안 승인됨: {proposal_obj.title}")
+            elif action == "rejected":
+                proposal_obj.status = "rejected"
+                if feedback:
+                    proposal_obj.rejection_reason = feedback
+                suffix = f" (사유: {feedback})" if feedback else ""
+                self.discord.send_message(
+                    f"❌ 제안 거부됨: {proposal_obj.title}{suffix}"
+                )
+            elif action == "modified":
+                proposal_obj.status = "pending"
+                self.discord.send_message(f"✏️ 제안 수정 요청: {proposal_obj.title}")
+
+            await session.commit()
+            return True
+
+    async def learn_from_results(self) -> dict[str, Any]:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(Proposal.__table__.select())
+            all_proposals = result.fetchall()
+
+        total = len(all_proposals)
+        if total == 0:
+            return {"total": 0, "approval_rate": 0.0, "insights": []}
+
+        approved = sum(
+            1 for proposal in all_proposals if proposal._mapping["status"] == "approved"
+        )
+        rejected = sum(
+            1 for proposal in all_proposals if proposal._mapping["status"] == "rejected"
+        )
+        approval_rate = approved / total if total > 0 else 0.0
+
+        rejected_types: dict[str, int] = {}
+        for proposal in all_proposals:
+            if proposal._mapping["status"] == "rejected":
+                action_key = proposal._mapping["action_type"] or "unknown"
+                rejected_types[action_key] = rejected_types.get(action_key, 0) + 1
+
+        insights: list[str] = []
+        if rejected_types:
+            worst_type = max(rejected_types, key=lambda key: rejected_types[key])
+            insights.append(
+                f"'{worst_type}' 유형 제안이 가장 많이 거부됨 ({rejected_types[worst_type]}건)"
+            )
+        if approval_rate < 0.5:
+            insights.append("승인율이 50% 미만 — 제안 품질 개선 필요")
+
+        return {
+            "total": total,
+            "approved": approved,
+            "rejected": rejected,
+            "approval_rate": round(approval_rate, 2),
+            "insights": insights,
+        }
+
+    async def _get_recent_signals(self, limit: int = 10) -> list[dict[str, Any]]:
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    MarketSignal.__table__.select()
+                    .order_by(MarketSignal.collected_at.desc())
+                    .limit(limit)
+                )
+                signals = result.fetchall()
+                return [
+                    {
+                        "source": signal._mapping["source"],
+                        "title": signal._mapping["title"],
+                        "summary": signal._mapping["summary"],
+                    }
+                    for signal in signals
+                ]
+        except Exception:
+            return []
+
+    async def _get_lead_count(self) -> int:
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(Lead.__table__.select())
+                return len(result.fetchall())
+        except Exception:
+            return 0
+
+    async def _get_recent_metrics(self) -> dict[str, int]:
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    DailyMetric.__table__.select()
+                    .order_by(DailyMetric.date.desc())
+                    .limit(7)
+                )
+                metrics = result.fetchall()
+                if not metrics:
+                    return {}
+                return {
+                    "avg_leads": sum(
+                        metric._mapping["leads_collected"] for metric in metrics
+                    )
+                    // len(metrics),
+                    "avg_proposals": sum(
+                        metric._mapping["proposals_made"] for metric in metrics
+                    )
+                    // len(metrics),
+                }
+        except Exception:
+            return {}
+
+    async def _is_duplicate(self, title: str) -> bool:
+        try:
+            cutoff = datetime.utcnow() - timedelta(hours=24)
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    Proposal.__table__.select().where(
+                        Proposal.title == title,
+                        Proposal.created_at >= cutoff,
+                    )
+                )
+                existing = result.first()
+                return existing is not None
+        except Exception:
+            return False
+
+    async def _save_proposal(self, proposal: ProposalData) -> int:
+        async with AsyncSessionLocal() as session:
+            db_proposal = Proposal(
+                title=proposal.title,
+                action_type=proposal.action_type,
+                content_draft=proposal.content_draft or proposal.rationale,
+                status="pending",
+                signal_id=proposal.signal_id,
+            )
+            session.add(db_proposal)
+            await session.commit()
+            await session.refresh(db_proposal)
+            return int(cast(Any, db_proposal.id))
