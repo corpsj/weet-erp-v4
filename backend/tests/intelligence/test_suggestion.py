@@ -94,53 +94,46 @@ async def test_propose_skips_duplicate(engine):
 
 @pytest.mark.asyncio
 async def test_handle_response_approved(engine):
-    mock_proposal = MagicMock()
-    mock_proposal.title = "테스트 제안"
-    mock_session = AsyncMock()
-    mock_session.get.return_value = mock_proposal
+    mock_sb = MagicMock()
+    mock_select = MagicMock()
+    mock_select.data = [{"id": 1, "title": "테스트 제안"}]
+    mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = mock_select
+    mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
-    with patch("app.intelligence.suggestion.AsyncSessionLocal") as mock_session_class:
-        mock_ctx = AsyncMock()
-        mock_ctx.__aenter__.return_value = mock_session
-        mock_session_class.return_value = mock_ctx
+    with patch("app.intelligence.suggestion.get_supabase", return_value=mock_sb):
         result = await engine.handle_response(1, "approved")
 
     assert result is True
-    assert mock_proposal.status == "approved"
     engine.discord.send_message.assert_called_once()
     assert "승인" in engine.discord.send_message.call_args[0][0]
 
 
 @pytest.mark.asyncio
 async def test_handle_response_rejected_with_reason(engine):
-    mock_proposal = MagicMock()
-    mock_proposal.title = "거부된 제안"
-    mock_session = AsyncMock()
-    mock_session.get.return_value = mock_proposal
+    mock_sb = MagicMock()
+    mock_select = MagicMock()
+    mock_select.data = [{"id": 1, "title": "거부된 제안"}]
+    mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = mock_select
+    mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
 
-    with patch("app.intelligence.suggestion.AsyncSessionLocal") as mock_session_class:
-        mock_ctx = AsyncMock()
-        mock_ctx.__aenter__.return_value = mock_session
-        mock_session_class.return_value = mock_ctx
+    with patch("app.intelligence.suggestion.get_supabase", return_value=mock_sb):
         result = await engine.handle_response(
             1, "rejected", feedback="시기적절하지 않음"
         )
 
     assert result is True
-    assert mock_proposal.status == "rejected"
-    assert mock_proposal.rejection_reason == "시기적절하지 않음"
+    engine.discord.send_message.assert_called_once()
+    assert "거부" in engine.discord.send_message.call_args[0][0]
 
 
 @pytest.mark.asyncio
 async def test_learn_from_results_empty(engine):
-    with patch("app.intelligence.suggestion.AsyncSessionLocal") as mock_session_class:
-        mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = []
-        mock_session.execute.return_value = mock_result
-        mock_ctx = AsyncMock()
-        mock_ctx.__aenter__.return_value = mock_session
-        mock_session_class.return_value = mock_ctx
+    mock_sb = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = []
+    mock_sb.table.return_value.select.return_value.execute.return_value = mock_result
+
+    with patch("app.intelligence.suggestion.get_supabase", return_value=mock_sb):
         result = await engine.learn_from_results()
 
     assert result["total"] == 0

@@ -12,6 +12,7 @@ import {
   useDeleteCompetitor,
   useLeadCollectionStatus,
   useTriggerLeadCollection,
+  useTriggerSuggestion,
 } from "@/lib/api/hooks/marketing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,17 +154,7 @@ function SystemContent() {
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <LeadCollectionTrigger />
-          <Button
-            variant="outline"
-            disabled
-            className="h-auto justify-between rounded-md border border-[#2a2a2a] bg-[#141414] p-4 text-left opacity-50"
-          >
-            <div>
-              <h3 className="font-bold text-[#ffffff]">제안 수동 생성 (곧 출시)</h3>
-              <p className="text-sm text-[#9a9a9a] mt-1">수집된 데이터를 바탕으로 AI 제안을 강제 생성합니다.</p>
-            </div>
-            <Zap className="h-5 w-5 text-[#9a9a9a]" />
-          </Button>
+          <SuggestionTrigger />
         </div>
       </div>
 
@@ -210,6 +201,39 @@ function LeadCollectionTrigger() {
         </p>
       </div>
       <Play className="h-5 w-5 text-[#9a9a9a]" />
+    </Button>
+  );
+}
+
+function SuggestionTrigger() {
+  const trigger = useTriggerSuggestion();
+
+  function handleTrigger() {
+    trigger.mutate(undefined, {
+      onSuccess: (data) =>
+        toast.success(
+          `제안 생성 트리거 완료 — 시그널 ${data.signals_count}건, 리드 ${data.leads_count}건`,
+        ),
+      onError: (err) => toast.error(err.message),
+    });
+  }
+
+  return (
+    <Button
+      variant="outline"
+      onClick={handleTrigger}
+      disabled={trigger.isPending}
+      className="h-auto justify-between rounded-md border border-[#2a2a2a] bg-[#141414] p-4 text-left"
+    >
+      <div>
+        <h3 className="font-bold text-[#ffffff]">
+          {trigger.isPending ? "생성 중..." : "제안 수동 생성"}
+        </h3>
+        <p className="text-sm text-[#9a9a9a] mt-1">
+          수집된 데이터를 바탕으로 AI 제안을 강제 생성합니다.
+        </p>
+      </div>
+      <Zap className="h-5 w-5 text-[#9a9a9a]" />
     </Button>
   );
 }

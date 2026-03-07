@@ -150,6 +150,144 @@ class WeetScheduler:
     async def _noop(self) -> None:
         return None
 
+    async def _run_daily_reset_job(self) -> None:
+        sb = get_supabase()
+        today = datetime.now(self._kst).strftime("%Y-%m-%d")
+        sb.table("marketing_daily_metrics").upsert(
+            {
+                "date": today,
+                "leads_collected": 0,
+                "proposals_made": 0,
+                "proposals_approved": 0,
+                "contents_published": 0,
+                "naver_api_calls": 0,
+            },
+            on_conflict="date",
+        ).execute()
+        logger.info("Daily metrics reset for %s", today)
+
+    async def _run_suggestion_job(self) -> None:
+        from app.intelligence.suggestion import SuggestionEngine
+
+        engine = SuggestionEngine()
+        proposals = await engine.generate_suggestions(max_proposals=3)
+        for proposal in proposals:
+            await engine.propose(proposal)
+        logger.info("Generated %d proposals", len(proposals))
+
+    async def _run_daily_report_job(self) -> None:
+        from app.core.discord_bot import DiscordBot
+
+        sb = get_supabase()
+        today = datetime.now(self._kst).strftime("%Y-%m-%d")
+        result = (
+            sb.table("marketing_daily_metrics")
+            .select("*")
+            .eq("date", today)
+            .limit(1)
+            .execute()
+        )
+        metrics = result.data[0] if result.data else {}
+        bot = DiscordBot()
+        bot.send_daily_report(metrics)
+        logger.info("Daily report sent")
+
+    async def _run_journey_check_job(self) -> None:
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_leads")
+            .select("id,username,score,status")
+            .in_("status", ["new", "contacted"])
+            .order("score", desc=True)
+            .limit(50)
+            .execute()
+        )
+        leads = result.data or []
+        updated = 0
+        for lead in leads:
+            score = int(lead.get("score") or 0)
+            current = str(lead.get("status") or "new")
+            new_status = current
+            if score >= 20 and current == "new":
+                new_status = "hot"
+            elif score >= 30:
+                new_status = "super_hot"
+            if new_status != current:
+                sb.table("marketing_leads").update({"status": new_status}).eq(
+                    "id", lead["id"]
+                ).execute()
+                updated += 1
+        logger.info("Journey check: %d leads updated out of %d", updated, len(leads))
+
+    async def _run_content_generate_job(self) -> None:
+        from app.content.generator import ContentGenerator
+
+        gen = ContentGenerator()
+        for channel in ["naver_blog", "instagram"]:
+            try:
+                if channel == "naver_blog":
+                    result = await gen.generate_blog_article(
+                        topic="이동식주택 트렌드", keywords=["이동식주택", "모듈러주택"]
+                    )
+                else:
+                    result = await gen.generate_instagram_caption(
+                        topic="이동식주택 트렌드"
+                    )
+                if result:
+                    logger.info(
+                        "Content generated for %s: %s",
+                        channel,
+                        getattr(result, "title", "untitled"),
+                    )
+            except Exception as exc:
+                logger.warning("Content generation failed for %s: %s", channel, exc)
+
+    async def _run_weekly_report_job(self) -> None:
+        from app.core.discord_bot import DiscordBot
+
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_daily_metrics")
+            .select("*")
+            .order("date", desc=True)
+            .limit(7)
+            .execute()
+        )
+        days = result.data or []
+        total_leads = sum(int(day.get("leads_collected") or 0) for day in days)
+        total_proposals = sum(int(day.get("proposals_made") or 0) for day in days)
+        total_published = sum(int(day.get("contents_published") or 0) for day in days)
+        bot = DiscordBot()
+        bot.send_weekly_report(
+            {
+                "total_leads": total_leads,
+                "total_proposals": total_proposals,
+                "total_published": total_published,
+            }
+        )
+        logger.info("Weekly report sent")
+
+    async def _run_monthly_analysis_job(self) -> None:
+        from app.core.discord_bot import DiscordBot
+
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_daily_metrics")
+            .select("*")
+            .order("date", desc=True)
+            .limit(30)
+            .execute()
+        )
+        days = result.data or []
+        total_leads = sum(int(day.get("leads_collected") or 0) for day in days)
+        total_proposals = sum(int(day.get("proposals_made") or 0) for day in days)
+        total_published = sum(int(day.get("contents_published") or 0) for day in days)
+        bot = DiscordBot()
+        bot.send_message(
+            f"📊 **월간 마케팅 분석**\n리드: {total_leads}건 | 제안: {total_proposals}건 | 발행: {total_published}건 | 기간: {len(days)}일"
+        )
+        logger.info("Monthly analysis sent")
+
     async def _execute_openclaw_call(
         self,
         job_name: str,
@@ -242,6 +380,9 @@ class WeetScheduler:
             for channel in self.CONTENT_PUBLISH_CHANNELS:
                 if channel == "instagram":
                     # Fetch content metadata to determine format type
+                    format_type = "feed"
+                    caption = ""
+                    media_path = ""
                     try:
                         sb = get_supabase()
                         content_row = (
@@ -261,8 +402,7 @@ class WeetScheduler:
                             media_path = str(metadata.get("media_path") or "")
                         format_type = str(metadata.get("format_type", "feed"))
                     except Exception:
-                        format_type = "feed"
-                        caption = ""
+                        pass
 
                     if format_type == "story":
                         operation = lambda cid=content_id, mp=media_path: (
@@ -377,8 +517,6 @@ class WeetScheduler:
             await bridge.close()
 
     async def _run_market_scan_job(self) -> None:
-        await self._noop()
-
         if self.dry_run:
             logger.info("DRY-RUN: would call OpenClaw for market_scan")
             return
@@ -399,22 +537,22 @@ class WeetScheduler:
             await bridge.close()
 
     async def _job_daily_reset(self) -> None:
-        await self._run_task("daily_reset", self._noop)
+        await self._run_task("daily_reset", self._run_daily_reset_job)
 
     async def _job_market_scan(self) -> None:
         await self._run_task("market_scan", self._run_market_scan_job)
 
     async def _job_suggestion_run(self) -> None:
-        await self._run_task("suggestion_run", self._noop)
+        await self._run_task("suggestion_run", self._run_suggestion_job)
 
     async def _job_daily_report(self) -> None:
-        await self._run_task("daily_report", self._noop)
+        await self._run_task("daily_report", self._run_daily_report_job)
 
     async def _job_journey_check(self) -> None:
-        await self._run_task("journey_check", self._noop)
+        await self._run_task("journey_check", self._run_journey_check_job)
 
     async def _job_content_generate(self) -> None:
-        await self._run_task("content_generate", self._noop)
+        await self._run_task("content_generate", self._run_content_generate_job)
 
     async def _job_content_publish(self) -> None:
         if not self._can_run_instagram_action():
@@ -477,7 +615,7 @@ class WeetScheduler:
         logger.info("Manual lead collection completed, flag cleared")
 
     async def _job_weekly_report(self) -> None:
-        await self._run_task("weekly_report", self._noop)
+        await self._run_task("weekly_report", self._run_weekly_report_job)
 
     async def _job_monthly_analysis(self) -> None:
-        await self._run_task("monthly_analysis", self._noop)
+        await self._run_task("monthly_analysis", self._run_monthly_analysis_job)

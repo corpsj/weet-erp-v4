@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any, Optional, cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 from app.core.discord_bot import DiscordBot
 from app.core.llm import LLMService
 from app.core.prompts import SUGGESTION_PROMPT
-from app.db.models import DailyMetric, Lead, MarketSignal, Proposal
-from app.db.session import AsyncSessionLocal
+from app.db.session import get_supabase
 
 ACTION_TYPES = ["content", "outreach", "strategy", "urgent", "calendar"]
 
@@ -126,53 +125,66 @@ class SuggestionEngine:
         action: str,
         feedback: Optional[str] = None,
     ) -> bool:
-        async with AsyncSessionLocal() as session:
-            proposal = await session.get(Proposal, proposal_id)
-            if not proposal:
-                return False
+        sb = get_supabase()
+        proposal_result = (
+            sb.table("marketing_proposals")
+            .select("id,title")
+            .eq("id", proposal_id)
+            .limit(1)
+            .execute()
+        )
+        proposal_rows = proposal_result.data or []
+        if not proposal_rows:
+            return False
 
-            proposal_obj = cast(Any, proposal)
+        proposal_title = str(proposal_rows[0].get("title", ""))
+        update_payload: dict[str, Any] = {}
 
-            if action == "approved":
-                proposal_obj.status = "approved"
-                proposal_obj.approved_at = datetime.utcnow()
-                self.discord.send_message(f"✅ 제안 승인됨: {proposal_obj.title}")
-            elif action == "rejected":
-                proposal_obj.status = "rejected"
-                if feedback:
-                    proposal_obj.rejection_reason = feedback
-                suffix = f" (사유: {feedback})" if feedback else ""
-                self.discord.send_message(
-                    f"❌ 제안 거부됨: {proposal_obj.title}{suffix}"
-                )
-            elif action == "modified":
-                proposal_obj.status = "pending"
-                self.discord.send_message(f"✏️ 제안 수정 요청: {proposal_obj.title}")
+        if action == "approved":
+            update_payload = {
+                "status": "approved",
+                "approved_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self.discord.send_message(f"✅ 제안 승인됨: {proposal_title}")
+        elif action == "rejected":
+            update_payload = {"status": "rejected"}
+            if feedback:
+                update_payload["rejection_reason"] = feedback
+            suffix = f" (사유: {feedback})" if feedback else ""
+            self.discord.send_message(f"❌ 제안 거부됨: {proposal_title}{suffix}")
+        elif action == "modified":
+            update_payload = {"status": "pending"}
+            self.discord.send_message(f"✏️ 제안 수정 요청: {proposal_title}")
 
-            await session.commit()
+        if not update_payload:
             return True
 
+        sb.table("marketing_proposals").update(update_payload).eq(
+            "id", proposal_id
+        ).execute()
+        return True
+
     async def learn_from_results(self) -> dict[str, Any]:
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(Proposal.__table__.select())
-            all_proposals = result.fetchall()
+        sb = get_supabase()
+        result = sb.table("marketing_proposals").select("status,action_type").execute()
+        all_proposals = result.data or []
 
         total = len(all_proposals)
         if total == 0:
             return {"total": 0, "approval_rate": 0.0, "insights": []}
 
         approved = sum(
-            1 for proposal in all_proposals if proposal._mapping["status"] == "approved"
+            1 for proposal in all_proposals if proposal.get("status") == "approved"
         )
         rejected = sum(
-            1 for proposal in all_proposals if proposal._mapping["status"] == "rejected"
+            1 for proposal in all_proposals if proposal.get("status") == "rejected"
         )
         approval_rate = approved / total if total > 0 else 0.0
 
         rejected_types: dict[str, int] = {}
         for proposal in all_proposals:
-            if proposal._mapping["status"] == "rejected":
-                action_key = proposal._mapping["action_type"] or "unknown"
+            if proposal.get("status") == "rejected":
+                action_key = str(proposal.get("action_type") or "unknown")
                 rejected_types[action_key] = rejected_types.get(action_key, 0) + 1
 
         insights: list[str] = []
@@ -194,81 +206,92 @@ class SuggestionEngine:
 
     async def _get_recent_signals(self, limit: int = 10) -> list[dict[str, Any]]:
         try:
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    MarketSignal.__table__.select()
-                    .order_by(MarketSignal.collected_at.desc())
-                    .limit(limit)
-                )
-                signals = result.fetchall()
-                return [
-                    {
-                        "source": signal._mapping["source"],
-                        "title": signal._mapping["title"],
-                        "summary": signal._mapping["summary"],
-                    }
-                    for signal in signals
-                ]
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_signals")
+                .select("source,title,summary")
+                .order("collected_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            signals = result.data or []
+            return [
+                {
+                    "source": signal.get("source", ""),
+                    "title": signal.get("title", ""),
+                    "summary": signal.get("summary", ""),
+                }
+                for signal in signals
+            ]
         except Exception:
             return []
 
     async def _get_lead_count(self) -> int:
         try:
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(Lead.__table__.select())
-                return len(result.fetchall())
+            sb = get_supabase()
+            result = sb.table("marketing_leads").select("id", count="exact").execute()
+            return int(result.count or 0)
         except Exception:
             return 0
 
     async def _get_recent_metrics(self) -> dict[str, int]:
         try:
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    DailyMetric.__table__.select()
-                    .order_by(DailyMetric.date.desc())
-                    .limit(7)
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_daily_metrics")
+                .select("leads_collected,proposals_made")
+                .order("date", desc=True)
+                .limit(7)
+                .execute()
+            )
+            metrics = result.data or []
+            if not metrics:
+                return {}
+            return {
+                "avg_leads": sum(
+                    int(metric.get("leads_collected") or 0) for metric in metrics
                 )
-                metrics = result.fetchall()
-                if not metrics:
-                    return {}
-                return {
-                    "avg_leads": sum(
-                        metric._mapping["leads_collected"] for metric in metrics
-                    )
-                    // len(metrics),
-                    "avg_proposals": sum(
-                        metric._mapping["proposals_made"] for metric in metrics
-                    )
-                    // len(metrics),
-                }
+                // len(metrics),
+                "avg_proposals": sum(
+                    int(metric.get("proposals_made") or 0) for metric in metrics
+                )
+                // len(metrics),
+            }
         except Exception:
             return {}
 
     async def _is_duplicate(self, title: str) -> bool:
         try:
-            cutoff = datetime.utcnow() - timedelta(hours=24)
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    Proposal.__table__.select().where(
-                        Proposal.title == title,
-                        Proposal.created_at >= cutoff,
-                    )
-                )
-                existing = result.first()
-                return existing is not None
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            sb = get_supabase()
+            result = (
+                sb.table("marketing_proposals")
+                .select("id")
+                .eq("title", title)
+                .gte("created_at", cutoff.isoformat())
+                .limit(1)
+                .execute()
+            )
+            existing = result.data or []
+            return len(existing) > 0
         except Exception:
             return False
 
     async def _save_proposal(self, proposal: ProposalData) -> int:
-        async with AsyncSessionLocal() as session:
-            db_proposal = Proposal(
-                title=proposal.title,
-                action_type=proposal.action_type,
-                content_draft=proposal.content_draft or proposal.rationale,
-                status="pending",
-                signal_id=proposal.signal_id,
+        sb = get_supabase()
+        result = (
+            sb.table("marketing_proposals")
+            .insert(
+                {
+                    "title": proposal.title,
+                    "action_type": proposal.action_type,
+                    "content_draft": proposal.content_draft or proposal.rationale,
+                    "status": "pending",
+                    "signal_id": proposal.signal_id,
+                }
             )
-            session.add(db_proposal)
-            await session.commit()
-            await session.refresh(db_proposal)
-            return int(cast(Any, db_proposal.id))
+            .execute()
+        )
+        if result.data:
+            return int(result.data[0].get("id", 0) or 0)
+        return 0

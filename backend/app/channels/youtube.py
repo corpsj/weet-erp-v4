@@ -70,8 +70,12 @@ class YouTubeChannel:
                         },
                     )
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Failed to collect commenters for video %s: %s", video_id, e
+            )
         return leads
 
     async def generate_shorts_script(self, topic: str) -> ScriptResult:

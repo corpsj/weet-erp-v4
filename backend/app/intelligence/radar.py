@@ -2,12 +2,12 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 from app.clients.naver import NaverClient
 from app.clients.youtube import YouTubeClient
 from app.core.discord_bot import DiscordBot
-from app.db.session import AsyncSessionLocal
-from app.db.models import MarketSignal
+from app.db.session import get_supabase
 
 # WEET 마케팅 키워드 세트
 DEMAND_KEYWORDS = [
@@ -33,8 +33,8 @@ class Signal:
     url: str = ""
     urgency: str = "low"  # critical, high, medium, low
     sentiment: str = "neutral"
-    keywords: list = field(default_factory=list)
-    collected_at: datetime = field(default_factory=datetime.utcnow)
+    keywords: list[str] = field(default_factory=list)
+    collected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class MarketRadar:
@@ -45,7 +45,7 @@ class MarketRadar:
         self.youtube = YouTubeClient()
         self.discord = DiscordBot()
 
-    async def scan_news(self, keywords: list[str] = None) -> list[Signal]:
+    async def scan_news(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan Naver news for policy changes, subsidies, trends."""
         keywords = keywords or DEMAND_KEYWORDS[:3]
         signals = []
@@ -69,7 +69,7 @@ class MarketRadar:
                 continue  # graceful degradation
         return signals
 
-    async def scan_blogs(self, keywords: list[str] = None) -> list[Signal]:
+    async def scan_blogs(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan Naver blogs for competitor content and trends."""
         keywords = keywords or DEMAND_KEYWORDS[:2]
         signals = []
@@ -93,7 +93,7 @@ class MarketRadar:
                 continue
         return signals
 
-    async def scan_cafes(self, keywords: list[str] = None) -> list[Signal]:
+    async def scan_cafes(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan Naver cafe posts for questions and interest."""
         keywords = keywords or DEMAND_KEYWORDS[:2]
         signals = []
@@ -117,7 +117,7 @@ class MarketRadar:
                 continue
         return signals
 
-    async def scan_youtube(self, keywords: list[str] = None) -> list[Signal]:
+    async def scan_youtube(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan YouTube for trending videos on modular housing topics."""
         keywords = keywords or ["이동식주택", "모듈러주택"]
         signals = []
@@ -164,21 +164,21 @@ class MarketRadar:
         return signals
 
     async def _save_signals(self, signals: list[Signal]):
-        """Save signals to database."""
+        """Save signals to Supabase via REST API."""
         try:
-            async with AsyncSessionLocal() as session:
-                for signal in signals:
-                    db_signal = MarketSignal(
-                        source=signal.source,
-                        signal_type=signal.signal_type,
-                        title=signal.title[:500],
-                        summary=signal.summary[:2000] if signal.summary else "",
-                        urgency=signal.urgency,
-                        sentiment=signal.sentiment,
-                        keywords=signal.keywords,
-                        url=signal.url[:1000] if signal.url else "",
-                    )
-                    session.add(db_signal)
-                await session.commit()
+            sb = get_supabase()
+            for signal in signals:
+                sb.table("marketing_signals").insert(
+                    {
+                        "source": signal.source,
+                        "signal_type": signal.signal_type,
+                        "title": signal.title[:500],
+                        "summary": signal.summary[:2000] if signal.summary else "",
+                        "urgency": signal.urgency,
+                        "sentiment": signal.sentiment,
+                        "keywords": signal.keywords,
+                        "url": signal.url[:1000] if signal.url else "",
+                    }
+                ).execute()
         except Exception:
             pass  # DB errors shouldn't crash radar

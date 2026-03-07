@@ -179,6 +179,63 @@ export function useTriggerLeadCollection() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Suggestion Trigger
+// ---------------------------------------------------------------------------
+
+export function useTriggerSuggestion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetchApi<{ signals_count: number; leads_count: number; triggered: boolean }>(
+        "/api/marketing/system/suggest",
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["marketing"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Signal Collection Trigger
+// ---------------------------------------------------------------------------
+
+export function useTriggerSignalCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetchApi<{ triggered: boolean; message: string }>(
+        "/api/marketing/signals/collect",
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["marketing", "signals"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Signal Report
+// ---------------------------------------------------------------------------
+
+export type SignalReportData = {
+  total: number;
+  by_type: Record<string, number>;
+  by_source: Record<string, number>;
+  by_urgency: Record<string, number>;
+  top_keywords: { keyword: string; count: number }[];
+};
+
+export function useSignalReport() {
+  return useQuery({
+    queryKey: ["marketing", "signals", "report"],
+    queryFn: () =>
+      fetchApi<SignalReportData>("/api/marketing/signals/report"),
+    enabled: false,
+  });
+}
+
 export function useApproveProposal() {
   const queryClient = useQueryClient();
   return useMutation({

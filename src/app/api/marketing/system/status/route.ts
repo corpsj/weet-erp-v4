@@ -67,7 +67,7 @@ async function checkNaverQuota(
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { data } = await supabase
-      .from("daily_metrics")
+      .from("marketing_daily_metrics")
       .select("naver_api_calls")
       .eq("date", today)
       .limit(1)

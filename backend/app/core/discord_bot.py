@@ -3,7 +3,7 @@
 import httpx
 import json
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.config import Settings
 
 settings = Settings()
@@ -62,9 +62,9 @@ class DiscordBot:
                 },
             ],
             "footer": {
-                "text": f"✅ 승인 | ✏️ 수정 | ❌ 거부  |  {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"
+                "text": f"✅ 승인 | ✏️ 수정 | ❌ 거부  |  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC"
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         if proposal.get("content_draft"):
             embed["fields"].append(
@@ -104,7 +104,7 @@ class DiscordBot:
                     "inline": True,
                 },
             ],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return self._post({"content": "📅 **오늘의 마케팅 현황**", "embeds": [embed]})
 
@@ -114,7 +114,7 @@ class DiscordBot:
             "title": "📈 위트 마케팅 주간 리포트",
             "color": 0x9932CC,
             "description": f"총 리드: {metrics.get('total_leads', 0)} | 총 제안: {metrics.get('total_proposals', 0)} | 발행: {metrics.get('total_published', 0)}",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return self._post({"content": "📊 **주간 마케팅 리포트**", "embeds": [embed]})
 
