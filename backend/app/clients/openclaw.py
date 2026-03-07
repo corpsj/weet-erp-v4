@@ -129,6 +129,105 @@ class OpenClawBridge:
         )
         return await self._execute_marketing_prompt(prompt)
 
+    # --- Instagram Content Publishing ---
+
+    async def publish_instagram_feed(
+        self, content_id: str, caption: str, image_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram feed post via OpenClaw."""
+        prompt = (
+            "Publish Instagram feed post. "
+            f"content_id={content_id}, "
+            f"caption={caption[:100]}..., "
+            f"image_path={image_path}. "
+            "Format: square or portrait image with caption. "
+            "Max caption length: 2200 chars. Include relevant hashtags. "
+            "CTA: 인스타그램: @weet_kr. "
+            "Return JSON with post_id on success."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def publish_instagram_story(
+        self, content_id: str, media_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram story via OpenClaw."""
+        prompt = (
+            "Publish Instagram story. "
+            f"content_id={content_id}, "
+            f"media_path={media_path}. "
+            "Format: vertical 9:16 image or video (max 15s). "
+            "Add subtle CTA sticker if appropriate. "
+            "Return JSON with story_id on success."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def publish_instagram_reel(
+        self, content_id: str, caption: str, video_path: str
+    ) -> dict[str, object]:
+        """Publish an Instagram reel via OpenClaw."""
+        prompt = (
+            "Publish Instagram reel. "
+            f"content_id={content_id}, "
+            f"caption={caption[:100]}..., "
+            f"video_path={video_path}. "
+            "Format: vertical 9:16 video, 15-90 seconds. "
+            "Max caption: 2200 chars with hashtags. "
+            "CTA: 인스타그램: @weet_kr. "
+            "Return JSON with reel_id on success."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    # --- Instagram Engagement Delegation ---
+
+    async def engage_instagram_like(self, media_id: str) -> dict[str, object]:
+        """Delegate Instagram like action to OpenClaw."""
+        prompt = (
+            "Execute Instagram engagement: like post. "
+            f"media_id={media_id}. "
+            "Like the specified post naturally. "
+            "Return JSON with success status."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def engage_instagram_follow(self, username: str) -> dict[str, object]:
+        """Delegate Instagram follow action to OpenClaw."""
+        prompt = (
+            "Execute Instagram engagement: follow user. "
+            f"username={username}. "
+            "Follow the user naturally. "
+            "Return JSON with success status."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def engage_instagram_comment(
+        self, media_id: str, comment_text: str
+    ) -> dict[str, object]:
+        """Delegate Instagram comment action to OpenClaw."""
+        prompt = (
+            "Execute Instagram engagement: comment on post. "
+            f"media_id={media_id}. "
+            f"Comment text: {comment_text}. "
+            "Brand tone: 친근하고 전문적, 과장 없음, 실용 정보 중심. "
+            "금지어: 최저가, 가장 싸, 제일 저렴, 100% 보장, 절대, 무조건, 최고의. "
+            "Return JSON with comment_id on success."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
+    async def engage_instagram_dm(
+        self, username: str, message: str
+    ) -> dict[str, object]:
+        """Delegate Instagram DM action to OpenClaw."""
+        prompt = (
+            "Execute Instagram engagement: send direct message. "
+            f"username={username}. "
+            f"Message: {message}. "
+            "Brand tone: 친근하고 전문적, 과장 없음. "
+            "Company: (주)위트, 슬로건: '집, 다시 생각하다'. "
+            "금지어: 최저가, 가장 싸, 제일 저렴, 100% 보장. "
+            "Return JSON with message_id on success."
+        )
+        return await self._execute_marketing_prompt(prompt)
+
     async def get_status(self) -> dict[str, object]:
         client = await self._get_client()
 

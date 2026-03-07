@@ -1,15 +1,20 @@
 """Instagram Channel Module — lead collection + engagement using instagrapi."""
 
 import asyncio
+import logging
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from app.clients.instagram_client import InstagrapiClient
+from app.core.config import Settings
 from app.core.discord_bot import DiscordBot
 from app.db.models import Lead, LeadAction
 from app.db.session import get_supabase
 from app.leads.discovery import DailyLimitTracker
+
+logger = logging.getLogger(__name__)
 
 OPERATING_HOURS_START = 7  # KST
 OPERATING_HOURS_END = 23  # KST
@@ -98,6 +103,8 @@ class InstagramChannel:
             likes=150, follows=50, comments=30, dms=15
         )
         self._session_cookie: Optional[str] = None  # instagrapi session reuse
+        self._instagrapi_wrapper: Optional[InstagrapiClient] = None
+        self._ig_client = None
 
     def _is_operating_hours(self) -> bool:
         """Check if within KST operating hours (07:00-23:00)."""
@@ -117,19 +124,208 @@ class InstagramChannel:
             for pattern in BOT_PATTERNS
         )
 
-    async def get_competitor_commenters(self, username: str) -> list[LeadCandidate]:
-        """Collect leads from competitor's post commenters."""
-        # NOTE: Real implementation uses instagrapi client
-        # For now returns empty list (real calls require account credentials)
-        return []
+    def _get_authenticated_client(self):
+        """Lazy-initialize and return authenticated instagrapi Client, or None."""
+        if self._ig_client is not None:
+            return self._ig_client
+        try:
+            settings = Settings()
+            ig_config = settings.instagram
+            if not ig_config.username or not ig_config.password:
+                logger.warning("Instagram credentials not configured")
+                return None
+            wrapper = InstagrapiClient(
+                username=ig_config.username,
+                password=ig_config.password,
+                session_dir=ig_config.session_dir,
+            )
+            if not wrapper.login():
+                logger.error("Failed to login to Instagram as %s", ig_config.username)
+                return None
+            self._instagrapi_wrapper = wrapper
+            self._ig_client = wrapper.get_client()
+            return self._ig_client
+        except Exception as exc:
+            logger.error("Failed to initialize instagrapi client: %s", exc)
+            return None
 
-    async def get_competitor_likers(self, post_id: str) -> list[LeadCandidate]:
-        """Collect leads from competitor's post likers."""
-        return []
+    async def get_competitor_commenters(
+        self, username: str | None = None
+    ) -> list[LeadCandidate]:
+        """Collect leads from competitor's post commenters via instagrapi."""
+        if not self._is_operating_hours():
+            logger.info("Outside operating hours, skipping competitor commenters")
+            return []
 
-    async def get_hashtag_users(self, hashtag: str) -> list[LeadCandidate]:
-        """Collect leads using hashtag (귀촌, 이동식주택 etc.)."""
-        return []
+        client = self._get_authenticated_client()
+        if client is None:
+            return []
+
+        competitors = get_instagram_settings("instagram_competitors")
+        if not competitors:
+            logger.info("No competitor accounts configured")
+            return []
+
+        leads: list[LeadCandidate] = []
+        for competitor in competitors:
+            try:
+                await asyncio.sleep(self._random_delay())
+                user_id = client.user_id_from_username(competitor)
+                medias = client.user_medias(user_id, amount=5)
+
+                for media in medias:
+                    try:
+                        await asyncio.sleep(self._random_delay())
+                        comments = client.media_comments(media.pk)
+                        for comment in comments:
+                            commenter_name = comment.user.username
+                            if self._is_bot_account(commenter_name):
+                                continue
+                            lead = LeadCandidate(
+                                username=commenter_name,
+                                platform="instagram",
+                                source="competitor_comment",
+                                metadata={
+                                    "source_account": competitor,
+                                    "media_id": str(media.pk),
+                                },
+                            )
+                            await self.save_lead_to_db(lead)
+                            leads.append(lead)
+                    except Exception as exc:
+                        logger.error(
+                            "Error fetching comments for media %s: %s", media.pk, exc
+                        )
+                        continue
+            except Exception as exc:
+                exc_text = str(exc).lower()
+                if "private" in exc_text:
+                    logger.warning("Competitor %s is private, skipping", competitor)
+                elif "not found" in exc_text or "doesn't exist" in exc_text:
+                    logger.warning("Competitor %s not found, skipping", competitor)
+                else:
+                    logger.error(
+                        "Error collecting commenters from %s: %s", competitor, exc
+                    )
+                continue
+
+        return leads
+
+    async def get_competitor_likers(
+        self, post_id: str | None = None
+    ) -> list[LeadCandidate]:
+        """Collect leads from competitor's post likers via instagrapi."""
+        if not self._is_operating_hours():
+            logger.info("Outside operating hours, skipping competitor likers")
+            return []
+
+        client = self._get_authenticated_client()
+        if client is None:
+            return []
+
+        competitors = get_instagram_settings("instagram_competitors")
+        if not competitors:
+            logger.info("No competitor accounts configured")
+            return []
+
+        leads: list[LeadCandidate] = []
+        for competitor in competitors:
+            try:
+                await asyncio.sleep(self._random_delay())
+                user_id = client.user_id_from_username(competitor)
+                medias = client.user_medias(user_id, amount=5)
+
+                for media in medias:
+                    try:
+                        await asyncio.sleep(self._random_delay())
+                        likers = client.media_likers(media.pk)
+                        for liker in likers:
+                            if self._is_bot_account(liker.username):
+                                continue
+                            lead = LeadCandidate(
+                                username=liker.username,
+                                platform="instagram",
+                                source="competitor_liker",
+                                metadata={
+                                    "source_account": competitor,
+                                    "media_id": str(media.pk),
+                                },
+                            )
+                            await self.save_lead_to_db(lead)
+                            leads.append(lead)
+                    except Exception as exc:
+                        logger.error(
+                            "Error fetching likers for media %s: %s", media.pk, exc
+                        )
+                        continue
+            except Exception as exc:
+                exc_text = str(exc).lower()
+                if "private" in exc_text:
+                    logger.warning("Competitor %s is private, skipping", competitor)
+                elif "not found" in exc_text or "doesn't exist" in exc_text:
+                    logger.warning("Competitor %s not found, skipping", competitor)
+                else:
+                    logger.error("Error collecting likers from %s: %s", competitor, exc)
+                continue
+
+        return leads
+
+    async def get_hashtag_users(
+        self, hashtag: str | None = None
+    ) -> list[LeadCandidate]:
+        """Collect leads from hashtag recent posts via instagrapi."""
+        if not self._is_operating_hours():
+            logger.info("Outside operating hours, skipping hashtag users")
+            return []
+
+        client = self._get_authenticated_client()
+        if client is None:
+            return []
+
+        hashtags = get_instagram_settings("instagram_target_hashtags")
+        if not hashtags:
+            logger.info("No target hashtags configured")
+            return []
+
+        leads: list[LeadCandidate] = []
+        seen_usernames: set[str] = set()
+
+        for tag in hashtags:
+            try:
+                await asyncio.sleep(self._random_delay())
+                medias = client.hashtag_medias_recent(tag, amount=20)
+
+                for media in medias:
+                    author = media.user.username
+                    if author in seen_usernames:
+                        continue
+                    seen_usernames.add(author)
+
+                    if self._is_bot_account(author):
+                        continue
+
+                    lead = LeadCandidate(
+                        username=author,
+                        platform="instagram",
+                        source="hashtag",
+                        metadata={
+                            "hashtag": tag,
+                            "media_id": str(media.pk),
+                        },
+                    )
+                    await self.save_lead_to_db(lead)
+                    leads.append(lead)
+            except Exception as exc:
+                exc_text = str(exc).lower()
+                if "restricted" in exc_text or "blocked" in exc_text:
+                    logger.warning("Hashtag '%s' is restricted, skipping", tag)
+                else:
+                    logger.error(
+                        "Error collecting users from hashtag '%s': %s", tag, exc
+                    )
+                continue
+
+        return leads
 
     async def like_post(self, post_id: str) -> bool:
         """Like a post with rate limit and delay check."""
