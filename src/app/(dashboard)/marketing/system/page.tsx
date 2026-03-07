@@ -10,6 +10,8 @@ import {
   useAddCompetitor,
   useUpdateCompetitor,
   useDeleteCompetitor,
+  useLeadCollectionStatus,
+  useTriggerLeadCollection,
 } from "@/lib/api/hooks/marketing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -150,17 +152,7 @@ function SystemContent() {
           <p className="text-sm text-[#9a9a9a] mt-1">스케줄러와 관계없이 작업을 강제로 실행합니다.</p>
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Button
-            variant="outline"
-            disabled
-            className="h-auto justify-between rounded-md border border-[#2a2a2a] bg-[#141414] p-4 text-left opacity-50"
-          >
-            <div>
-              <h3 className="font-bold text-[#ffffff]">Market Radar 실행 (곧 출시)</h3>
-              <p className="text-sm text-[#9a9a9a] mt-1">신규 신호 및 리드 수집을 즉시 시작합니다.</p>
-            </div>
-            <Play className="h-5 w-5 text-[#9a9a9a]" />
-          </Button>
+          <LeadCollectionTrigger />
           <Button
             variant="outline"
             disabled
@@ -177,6 +169,48 @@ function SystemContent() {
 
       <CompetitorSection />
     </div>
+  );
+}
+
+function LeadCollectionTrigger() {
+  const { data: status } = useLeadCollectionStatus();
+  const trigger = useTriggerLeadCollection();
+
+  const isRequested = status?.requested ?? false;
+  const requestedAt = status?.requested_at;
+
+  function handleTrigger() {
+    trigger.mutate(undefined, {
+      onSuccess: () => toast.success("잠재고객 수집이 예약되었습니다. 다음 스케줄러 실행 시 수집됩니다."),
+      onError: (err) => toast.error(err.message),
+    });
+  }
+
+  return (
+    <Button
+      variant="outline"
+      onClick={handleTrigger}
+      disabled={trigger.isPending || isRequested}
+      className={`h-auto justify-between rounded-md border border-[#2a2a2a] bg-[#141414] p-4 text-left ${
+        isRequested ? "opacity-50" : ""
+      }`}
+    >
+      <div>
+        <h3 className="font-bold text-[#ffffff]">
+          {trigger.isPending
+            ? "요청 중..."
+            : isRequested
+              ? "수집 대기 중"
+              : "잠재고객 수집 시작"}
+        </h3>
+        <p className="text-sm text-[#9a9a9a] mt-1">
+          {isRequested && requestedAt
+            ? `요청 시각: ${formatDate(requestedAt)}`
+            : "등록된 경쟁업체에서 잠재고객을 즉시 수집합니다."}
+        </p>
+      </div>
+      <Play className="h-5 w-5 text-[#9a9a9a]" />
+    </Button>
   );
 }
 

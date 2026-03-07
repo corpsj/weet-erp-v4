@@ -150,6 +150,35 @@ export function useDeleteCompetitor() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Lead Collection Trigger
+// ---------------------------------------------------------------------------
+
+export function useLeadCollectionStatus() {
+  return useQuery({
+    queryKey: ["marketing", "lead-collection-status"],
+    queryFn: () =>
+      fetchApi<{ requested: boolean; requested_at: string | null }>(
+        "/api/marketing/leads/collect",
+      ),
+    staleTime: 1000 * 10,
+  });
+}
+
+export function useTriggerLeadCollection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetchApi<{ requested: boolean; requested_at: string }>(
+        "/api/marketing/leads/collect",
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "lead-collection-status"] });
+    },
+  });
+}
+
 export function useApproveProposal() {
   const queryClient = useQueryClient();
   return useMutation({
