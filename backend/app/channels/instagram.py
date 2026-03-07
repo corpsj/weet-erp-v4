@@ -155,7 +155,11 @@ class InstagramChannel:
             for pattern in BOT_PATTERNS
         )
 
-    def _get_authenticated_client(self):
+    async def _run_sync(self, fn):
+        """Run a synchronous function in the event loop executor to prevent blocking."""
+        return await asyncio.get_event_loop().run_in_executor(None, fn)
+
+    async def _get_authenticated_client(self):
         """Lazy-initialize and return authenticated instagrapi Client, or None."""
         if self._ig_client is not None:
             return self._ig_client
@@ -170,7 +174,7 @@ class InstagramChannel:
                 password=ig_config.password,
                 session_dir=ig_config.session_dir,
             )
-            if not wrapper.login():
+            if not await self._run_sync(wrapper.login):
                 logger.error("Failed to login to Instagram as %s", ig_config.username)
                 return None
             self._instagrapi_wrapper = wrapper
@@ -191,7 +195,7 @@ class InstagramChannel:
             logger.info("Skipping lead collection: in action block cooldown")
             return []
 
-        client = self._get_authenticated_client()
+        client = await self._get_authenticated_client()
         if client is None:
             return []
 
@@ -204,13 +208,19 @@ class InstagramChannel:
         for competitor in competitors:
             try:
                 await asyncio.sleep(self._random_delay())
-                user_id = client.user_id_from_username(competitor)
-                medias = client.user_medias(user_id, amount=5)
+                user_id = await self._run_sync(
+                    lambda: client.user_id_from_username(competitor)
+                )
+                medias = await self._run_sync(
+                    lambda: client.user_medias(user_id, amount=5)
+                )
 
                 for media in medias:
                     try:
                         await asyncio.sleep(self._random_delay())
-                        comments = client.media_comments(media.pk)
+                        comments = await self._run_sync(
+                            lambda: client.media_comments(media.pk)
+                        )
                         for comment in comments:
                             commenter_name = comment.user.username
                             if self._is_bot_account(commenter_name):
@@ -271,7 +281,7 @@ class InstagramChannel:
             logger.info("Skipping lead collection: in action block cooldown")
             return []
 
-        client = self._get_authenticated_client()
+        client = await self._get_authenticated_client()
         if client is None:
             return []
 
@@ -284,13 +294,19 @@ class InstagramChannel:
         for competitor in competitors:
             try:
                 await asyncio.sleep(self._random_delay())
-                user_id = client.user_id_from_username(competitor)
-                medias = client.user_medias(user_id, amount=5)
+                user_id = await self._run_sync(
+                    lambda: client.user_id_from_username(competitor)
+                )
+                medias = await self._run_sync(
+                    lambda: client.user_medias(user_id, amount=5)
+                )
 
                 for media in medias:
                     try:
                         await asyncio.sleep(self._random_delay())
-                        likers = client.media_likers(media.pk)
+                        likers = await self._run_sync(
+                            lambda: client.media_likers(media.pk)
+                        )
                         for liker in likers:
                             if self._is_bot_account(liker.username):
                                 continue
@@ -348,7 +364,7 @@ class InstagramChannel:
             logger.info("Skipping lead collection: in action block cooldown")
             return []
 
-        client = self._get_authenticated_client()
+        client = await self._get_authenticated_client()
         if client is None:
             return []
 
@@ -363,7 +379,9 @@ class InstagramChannel:
         for tag in hashtags:
             try:
                 await asyncio.sleep(self._random_delay())
-                medias = client.hashtag_medias_recent(tag, amount=20)
+                medias = await self._run_sync(
+                    lambda: client.hashtag_medias_recent(tag, amount=20)
+                )
 
                 for media in medias:
                     author = media.user.username
