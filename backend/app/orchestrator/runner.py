@@ -15,7 +15,7 @@ class TaskResult:
     executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class DiscordAlertClient(Protocol):
+class NotifierProtocol(Protocol):
     def send_alert(self, alert_type: str, message: str) -> bool: ...
 
 
@@ -26,10 +26,10 @@ class TaskRunner:
 
     def __init__(
         self,
-        discord_bot: Optional[DiscordAlertClient] = None,
+        notifier: Optional[NotifierProtocol] = None,
         dry_run: bool = False,
     ):
-        self.discord_bot: Optional[DiscordAlertClient] = discord_bot
+        self.notifier: Optional[NotifierProtocol] = notifier
         self.dry_run: bool = dry_run
         self._log: list[TaskResult] = []
 
@@ -56,17 +56,15 @@ class TaskRunner:
                         task_name=task_name, success=False, error=str(exc)
                     )
                     self._log.append(result)
-                    if self.discord_bot:
-                        self.discord_bot.send_alert(
-                            "error", f"{task_name} failed: {exc}"
-                        )
+                    if self.notifier:
+                        self.notifier.send_alert("error", f"{task_name} failed: {exc}")
                     return result
             except RuntimeError as exc:
                 logger.error("[%s] Rate limit: %s", task_name, exc)
                 result = TaskResult(task_name=task_name, success=False, error=str(exc))
                 self._log.append(result)
-                if self.discord_bot:
-                    self.discord_bot.send_alert(
+                if self.notifier:
+                    self.notifier.send_alert(
                         "error", f"{task_name} rate limited: {exc}"
                     )
                 return result
@@ -82,10 +80,8 @@ class TaskRunner:
                         task_name=task_name, success=False, error=str(exc)
                     )
                     self._log.append(result)
-                    if self.discord_bot:
-                        self.discord_bot.send_alert(
-                            "error", f"{task_name} failed: {exc}"
-                        )
+                    if self.notifier:
+                        self.notifier.send_alert("error", f"{task_name} failed: {exc}")
                     return result
 
         return TaskResult(

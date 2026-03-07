@@ -2,7 +2,7 @@ import random
 from datetime import date, datetime, timezone
 from typing import Any, Union, cast
 
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.db.models import Lead
 from app.db.session import get_supabase
 from app.leads.persona import PersonaClassifier
@@ -93,7 +93,7 @@ class LeadDiscovery:
     def __init__(self):
         self.scorer: LeadScorer = LeadScorer()
         self.persona_classifier: PersonaClassifier = PersonaClassifier()
-        self.discord: DiscordBot = DiscordBot()
+        self.discord: NotificationService = NotificationService()
         self.limit_tracker: DailyLimitTracker = DailyLimitTracker()
 
     def _random_delay(self) -> float:

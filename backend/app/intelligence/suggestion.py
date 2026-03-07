@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.core.llm import LLMService
 from app.core.prompts import SUGGESTION_PROMPT
 from app.db.session import get_supabase
@@ -24,7 +24,7 @@ class ProposalData:
 class SuggestionEngine:
     def __init__(self):
         self.llm = LLMService()
-        self.discord = DiscordBot()
+        self.discord = NotificationService()
 
     async def generate_suggestions(
         self,

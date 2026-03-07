@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.content.generator import ContentGenerator
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.db.session import get_supabase
 from app.db.models import Content
 
@@ -16,7 +16,7 @@ class BlogDraft:
     topic: str
     title: str
     body: str
-    keywords: list = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
     id: Optional[int] = None
 
 
@@ -25,7 +25,7 @@ class NaverBlogChannel:
 
     def __init__(self):
         self.generator = ContentGenerator()
-        self.discord = DiscordBot()
+        self.discord = NotificationService()
 
     async def generate_draft(self, topic: str, keywords: list[str]) -> BlogDraft:
         """Generate a blog article draft using AI."""

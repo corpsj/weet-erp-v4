@@ -9,7 +9,7 @@ from typing import Optional
 from app.clients.naver import NaverClient
 from app.clients.youtube import YouTubeClient
 from app.core.llm import LLMService
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class MarketRadar:
     def __init__(self):
         self.naver = NaverClient()
         self.youtube = YouTubeClient()
-        self.discord = DiscordBot()
+        self.discord = NotificationService()
         self._llm: Optional[LLMService] = None
 
     async def scan_news(self, keywords: Optional[list[str]] = None) -> list[Signal]:

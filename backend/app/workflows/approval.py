@@ -5,7 +5,7 @@ from typing import Awaitable, Mapping, Optional, Protocol, Union, cast
 from app.db.models import Proposal
 
 
-class DiscordBotProtocol(Protocol):
+class NotifierProtocol(Protocol):
     def send_proposal(self, proposal: dict[str, str]) -> bool: ...
 
     def send_alert(self, alert_type: str, message: str) -> bool: ...
@@ -43,11 +43,11 @@ class ApprovalResult:
 class ApprovalWorkflow:
     def __init__(
         self,
-        discord_bot: DiscordBotProtocol,
+        notifier: NotifierProtocol,
         db_session: Optional[SessionProtocol] = None,
         executor: Optional[ExecutorProtocol] = None,
     ):
-        self.discord_bot = discord_bot
+        self.notifier = notifier
         self.db_session = db_session
         self.executor = executor
 
@@ -64,7 +64,7 @@ class ApprovalWorkflow:
             ),
             "content_draft": self._as_str(proposal.get("content_draft")),
         }
-        return bool(self.discord_bot.send_proposal(payload))
+        return bool(self.notifier.send_proposal(payload))
 
     async def on_discord_reaction(
         self, proposal_id: int, reaction: str
@@ -100,7 +100,7 @@ class ApprovalWorkflow:
             )
 
         if reaction == "modify":
-            self.discord_bot.send_alert(
+            self.notifier.send_alert(
                 "market_change",
                 f"✏️ 수정 요청: 제안 #{proposal_id} 내용을 수정해 주세요.",
             )
@@ -127,7 +127,7 @@ class ApprovalWorkflow:
         payload = data or {}
         if action == "approve":
             result = await self.on_discord_reaction(proposal_id, "approve")
-            self.discord_bot.send_alert(
+            self.notifier.send_alert(
                 "market_change",
                 f"대시보드 승인: 제안 #{proposal_id}",
             )
@@ -141,7 +141,7 @@ class ApprovalWorkflow:
                 rejection_reason=reason if reason else None,
             )
             suffix = f" (사유: {reason})" if reason else ""
-            self.discord_bot.send_alert(
+            self.notifier.send_alert(
                 "market_change",
                 f"대시보드 거부: 제안 #{proposal_id}{suffix}",
             )
@@ -156,7 +156,7 @@ class ApprovalWorkflow:
 
         if action == "modify":
             result = await self.on_discord_reaction(proposal_id, "modify")
-            self.discord_bot.send_alert(
+            self.notifier.send_alert(
                 "market_change",
                 f"대시보드 수정 요청: 제안 #{proposal_id}",
             )

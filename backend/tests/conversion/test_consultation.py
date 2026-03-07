@@ -12,7 +12,9 @@ from app.conversion.consultation import (
 
 @pytest.fixture
 def service() -> ConsultationService:
-    with patch("app.conversion.consultation.DiscordBot", return_value=MagicMock()):
+    with patch(
+        "app.conversion.consultation.NotificationService", return_value=MagicMock()
+    ):
         return ConsultationService()
 
 
@@ -160,7 +162,9 @@ def test_get_persona_dm_unknown_persona(service: ConsultationService) -> None:
 
 def test_send_conversion_discord_alert(service: ConsultationService) -> None:
     mock_discord = MagicMock()
-    with patch("app.conversion.consultation.DiscordBot", return_value=mock_discord):
+    with patch(
+        "app.conversion.consultation.NotificationService", return_value=mock_discord
+    ):
         service = ConsultationService()
 
     lead = {

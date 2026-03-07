@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from app.clients.instagram_client import InstagrapiClient
 from app.core.config import Settings
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.db.models import Lead, LeadAction
 from app.db.session import get_supabase
 from app.leads.discovery import DailyLimitTracker
@@ -116,7 +116,7 @@ class InstagramChannel:
     """
 
     def __init__(self) -> None:
-        self.discord = DiscordBot()
+        self.discord = NotificationService()
         try:
             supabase = get_supabase()
         except Exception:

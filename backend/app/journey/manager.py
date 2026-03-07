@@ -43,11 +43,11 @@ class JourneyManager:
     def __init__(
         self,
         llm_service: "LLMClient",
-        discord_bot: "DiscordClient",
+        notifier: "NotifierClient",
         db_session: "DBSession | None" = None,
     ):
         self.llm_service: LLMClient = llm_service
-        self.discord_bot: DiscordClient = discord_bot
+        self.notifier: NotifierClient = notifier
         self.db_session: DBSession | None = db_session
 
     async def update_stage(self, lead_id: int, new_stage: JourneyStage) -> bool:
@@ -67,7 +67,7 @@ class JourneyManager:
         if any(keyword in last_message for keyword in self.HANDOFF_KEYWORDS):
             username = self._value(lead, "username", "unknown")
             msg = f"@{username} 리드에서 상담 요청 신호 감지: {last_message}"
-            _ = self.discord_bot.send_alert("urgent", msg)
+            _ = self.notifier.send_alert("urgent", msg)
             return [
                 Action(
                     action_type="send_alert",

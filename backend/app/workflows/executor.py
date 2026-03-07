@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional, Protocol
 
 
-class DiscordBotProtocol(Protocol):
+class NotifierProtocol(Protocol):
     def send_alert(self, alert_type: str, message: str) -> bool: ...
 
 
@@ -31,11 +31,11 @@ class ExecutionResult:
 class ActionExecutor:
     def __init__(
         self,
-        discord_bot: Optional[DiscordBotProtocol] = None,
+        notifier: Optional[NotifierProtocol] = None,
         content_generator: Optional[ContentGeneratorProtocol] = None,
         db_session: Optional[object] = None,
     ):
-        self.discord_bot = discord_bot
+        self.notifier = notifier
         self.content_generator = content_generator
         self.db_session = db_session
         self._executed: list[int] = []
@@ -69,8 +69,8 @@ class ActionExecutor:
 
             self._executed.append(proposal_id)
 
-            if self.discord_bot:
-                self.discord_bot.send_alert(
+            if self.notifier:
+                self.notifier.send_alert(
                     "market_change",
                     f"✅ 실행 완료: {self._as_str(proposal.get('title'))}",
                 )
@@ -82,8 +82,8 @@ class ActionExecutor:
                 output=output,
             )
         except Exception as exc:
-            if self.discord_bot:
-                self.discord_bot.send_alert(
+            if self.notifier:
+                self.notifier.send_alert(
                     "error",
                     f"❌ 실행 실패: {self._as_str(proposal.get('title'))} — {exc}",
                 )
@@ -110,16 +110,16 @@ class ActionExecutor:
         return f"아웃리치 메시지 생성: {self._as_str(proposal.get('title'))}"
 
     async def _execute_strategy(self, proposal: Mapping[str, object]) -> str:
-        if self.discord_bot:
-            self.discord_bot.send_alert(
+        if self.notifier:
+            self.notifier.send_alert(
                 "market_change",
                 f"전략 업데이트: {self._as_str(proposal.get('title'))}",
             )
         return f"전략 적용 완료: {self._as_str(proposal.get('title'))}"
 
     async def _execute_urgent(self, proposal: Mapping[str, object]) -> str:
-        if self.discord_bot:
-            self.discord_bot.send_alert(
+        if self.notifier:
+            self.notifier.send_alert(
                 "urgent",
                 f"🚨 긴급 알림: {self._as_str(proposal.get('title'))}",
             )

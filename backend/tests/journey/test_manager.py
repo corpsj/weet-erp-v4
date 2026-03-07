@@ -17,11 +17,9 @@ class DummyLead:
 def manager() -> JourneyManager:
     llm_service = MagicMock()
     llm_service.generate = MagicMock(return_value="안녕하세요, 위트입니다.")
-    discord_bot = MagicMock()
-    discord_bot.send_alert = MagicMock(return_value=True)
-    return JourneyManager(
-        llm_service=llm_service, discord_bot=discord_bot, db_session=None
-    )
+    notifier = MagicMock()
+    notifier.send_alert = MagicMock(return_value=True)
+    return JourneyManager(llm_service=llm_service, notifier=notifier, db_session=None)
 
 
 @pytest.mark.asyncio
@@ -32,7 +30,7 @@ async def test_update_stage_changes_stage():
     db_session.commit = AsyncMock(return_value=None)
     manager = JourneyManager(
         llm_service=MagicMock(),
-        discord_bot=MagicMock(),
+        notifier=MagicMock(),
         db_session=db_session,
     )
 

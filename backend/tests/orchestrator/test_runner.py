@@ -48,14 +48,14 @@ async def test_run_rate_limit_stops_immediately() -> None:
 
 
 async def test_run_sends_discord_alert_on_failure() -> None:
-    discord_bot = MagicMock()
-    runner = TaskRunner(discord_bot=discord_bot)
+    notifier = MagicMock()
+    runner = TaskRunner(notifier=notifier)
     coro = AsyncMock(side_effect=RuntimeError("rate limit"))
 
     result = await runner.run("lead_hunt", coro)
 
     assert result.success is False
-    discord_bot.send_alert.assert_called_once()
+    notifier.send_alert.assert_called_once()
 
 
 async def test_get_log_returns_results() -> None:

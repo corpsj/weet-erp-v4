@@ -96,7 +96,7 @@ class TriggerEngine:
                     self.journey_manager.value(lead, "last_message", "") or ""
                 )
                 alert_message = f"@{username} 리드에서 상담 요청 신호 감지: {message}"
-                _ = self.journey_manager.discord_bot.send_alert("urgent", alert_message)
+                _ = self.journey_manager.notifier.send_alert("urgent", alert_message)
                 return [
                     Action(
                         action_type="send_alert",

@@ -3,6 +3,7 @@ import asyncio
 import logging
 import sys
 
+from app.core.notification_service import NotificationService
 from app.orchestrator.runner import TaskRunner
 from app.orchestrator.scheduler import WeetScheduler
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_once(dry_run: bool = False):
-    runner = TaskRunner(dry_run=dry_run)
+    runner = TaskRunner(notifier=NotificationService(), dry_run=dry_run)
     task_names = [
         "daily_reset",
         "market_scan",
@@ -59,7 +60,7 @@ def main() -> None:
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    runner = TaskRunner()
+    runner = TaskRunner(notifier=NotificationService())
     scheduler = WeetScheduler(runner=runner)
     try:
         scheduler.start()

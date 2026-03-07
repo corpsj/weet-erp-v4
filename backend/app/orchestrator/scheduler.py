@@ -193,7 +193,7 @@ class WeetScheduler:
         )
 
     async def _run_daily_report_job(self) -> None:
-        from app.core.discord_bot import DiscordBot
+        from app.core.notification_service import NotificationService
 
         sb = get_supabase()
         today = datetime.now(self._kst).strftime("%Y-%m-%d")
@@ -205,7 +205,7 @@ class WeetScheduler:
             .execute()
         )
         metrics = result.data[0] if result.data else {}
-        bot = DiscordBot()
+        bot = NotificationService()
         bot.send_daily_report(metrics)
         logger.info("Daily report sent")
 
@@ -449,7 +449,7 @@ class WeetScheduler:
         return random.choice(evergreen)
 
     async def _run_weekly_report_job(self) -> None:
-        from app.core.discord_bot import DiscordBot
+        from app.core.notification_service import NotificationService
 
         sb = get_supabase()
         result = (
@@ -463,7 +463,7 @@ class WeetScheduler:
         total_leads = sum(int(day.get("leads_collected") or 0) for day in days)
         total_proposals = sum(int(day.get("proposals_made") or 0) for day in days)
         total_published = sum(int(day.get("contents_published") or 0) for day in days)
-        bot = DiscordBot()
+        bot = NotificationService()
         bot.send_weekly_report(
             {
                 "total_leads": total_leads,
@@ -474,7 +474,7 @@ class WeetScheduler:
         logger.info("Weekly report sent")
 
     async def _run_monthly_analysis_job(self) -> None:
-        from app.core.discord_bot import DiscordBot
+        from app.core.notification_service import NotificationService
 
         sb = get_supabase()
         result = (
@@ -488,7 +488,7 @@ class WeetScheduler:
         total_leads = sum(int(day.get("leads_collected") or 0) for day in days)
         total_proposals = sum(int(day.get("proposals_made") or 0) for day in days)
         total_published = sum(int(day.get("contents_published") or 0) for day in days)
-        bot = DiscordBot()
+        bot = NotificationService()
         bot.send_message(
             f"📊 **월간 마케팅 분석**\n리드: {total_leads}건 | 제안: {total_proposals}건 | 발행: {total_published}건 | 기간: {len(days)}일"
         )

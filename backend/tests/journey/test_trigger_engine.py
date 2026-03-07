@@ -11,10 +11,10 @@ from app.journey.trigger_engine import TriggerEngine
 def engine() -> TriggerEngine:
     llm_service = MagicMock()
     llm_service.generate = MagicMock(return_value="안녕하세요, 위트입니다.")
-    discord_bot = MagicMock()
-    discord_bot.send_alert = MagicMock(return_value=True)
+    notifier = MagicMock()
+    notifier.send_alert = MagicMock(return_value=True)
     manager = JourneyManager(
-        llm_service=llm_service, discord_bot=discord_bot, db_session=None
+        llm_service=llm_service, notifier=notifier, db_session=None
     )
     return TriggerEngine(journey_manager=manager)
 

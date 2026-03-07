@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from app.core.discord_bot import DiscordBot
+from app.core.notification_service import NotificationService
 from app.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ DEFAULT_DM_TEMPLATE = (
 
 class ConsultationService:
     def __init__(self) -> None:
-        self.discord = DiscordBot()
+        self.discord = NotificationService()
         self._kst = ZoneInfo("Asia/Seoul")
 
     def create_consultation(
