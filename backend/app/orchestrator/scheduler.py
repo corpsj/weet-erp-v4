@@ -216,11 +216,53 @@ class WeetScheduler:
         bridge = OpenClawBridge()
         try:
             for channel in self.CONTENT_PUBLISH_CHANNELS:
-                result = await self._execute_openclaw_call(
-                    "content_publish",
-                    f"publish_content:{channel}",
-                    lambda c=channel: bridge.publish_content(c, content_id),
-                )
+                if channel == "instagram":
+                    # Fetch content metadata to determine format type
+                    try:
+                        sb = get_supabase()
+                        content_row = (
+                            sb.table("marketing_contents")
+                            .select("metadata,caption")
+                            .eq("content_id", content_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        metadata: dict[str, object] = {}
+                        caption = ""
+                        if content_row.data:
+                            raw_meta = content_row.data[0].get("metadata")
+                            metadata = raw_meta if isinstance(raw_meta, dict) else {}
+                            caption = str(content_row.data[0].get("caption") or "")
+                        format_type = str(metadata.get("format_type", "feed"))
+                    except Exception:
+                        format_type = "feed"
+                        caption = ""
+
+                    if format_type == "story":
+                        operation = lambda cid=content_id: (
+                            bridge.publish_instagram_story(cid, "")
+                        )
+                    elif format_type == "reel":
+                        operation = lambda cid=content_id, cap=caption: (
+                            bridge.publish_instagram_reel(cid, cap, "")
+                        )
+                    else:
+                        operation = lambda cid=content_id, cap=caption: (
+                            bridge.publish_instagram_feed(cid, cap, "")
+                        )
+
+                    result = await self._execute_openclaw_call(
+                        "content_publish",
+                        f"publish_{format_type}:instagram",
+                        operation,
+                    )
+                else:
+                    result = await self._execute_openclaw_call(
+                        "content_publish",
+                        f"publish_content:{channel}",
+                        lambda c=channel: bridge.publish_content(c, content_id),
+                    )
+
                 success = bool(result.get("success", False))
                 if success:
                     success_count += 1
