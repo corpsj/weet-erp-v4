@@ -4,6 +4,7 @@ from typing import Protocol
 from app.content.brand_voice import BrandVoice, CONTACT
 from app.core.llm import LLMService
 from app.core.prompts import CONTENT_GENERATION_PROMPT
+from app.leads.persona import PersonaClassifier, PersonaType
 
 
 class LLMClient(Protocol):
@@ -85,11 +86,26 @@ class ContentGenerator:
         self, topic: str, keywords: list[str], persona: "str | None" = None
     ) -> BlogArticle:
         system = self.brand_voice.get_system_prompt("blog")
+        pref = {"tone": "균형적", "topics": ["이동식주택 소개"]}
+        if persona and persona != "일반 독자":
+            try:
+                pref = dict(
+                    PersonaClassifier().get_content_preference(PersonaType(persona))
+                )
+            except ValueError:
+                pref = {"tone": "균형적", "topics": ["이동식주택 소개"]}
+
         prompt = CONTENT_GENERATION_PROMPT.format(
             channel="네이버 블로그",
             topic=topic,
             keywords=", ".join(keywords),
             persona=persona or "일반 독자",
+        )
+        topics = pref.get("topics", [])
+        topic_list = topics if isinstance(topics, list) else []
+        prompt = (
+            f"{prompt}\n톤: {pref.get('tone', '균형적')}"
+            f"\n관련 토픽: {', '.join(str(item) for item in topic_list)}"
         )
         body = self.llm.generate(prompt, model=self.llm.model, system=system)
         body = self.brand_voice.add_cta(body, "blog")

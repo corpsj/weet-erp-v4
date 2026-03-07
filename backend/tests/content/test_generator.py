@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 
 from app.content.brand_voice import BrandVoice
 from app.content.generator import BlogArticle, ContentGenerator
@@ -6,10 +7,12 @@ from app.content.generator import BlogArticle, ContentGenerator
 
 class FakeLLM:
     model: str
+    model_fast: str
     response: str
 
     def __init__(self, response: str):
         self.model = "huihui-qwen3.5-35b-a3b-abliterated-mlx"
+        self.model_fast = "huihui-qwen3.5-35b-a3b-abliterated-mlx"
         self.response = response
 
     def generate(
@@ -98,3 +101,43 @@ async def test_youtube_script_format():
     script = await gen.generate_youtube_script("이동식주택 실제 비용", format="short")
     assert script.format == "short"
     assert len(script.body) > 0
+
+
+@pytest.mark.asyncio
+async def test_blog_article_uses_persona_preference():
+    gen = ContentGenerator()
+    llm = MagicMock()
+    llm.model = "test-model"
+    llm.model_fast = "test-fast"
+    llm.generate = MagicMock(return_value="테스트 본문")
+    gen.llm = llm
+
+    _ = await gen.generate_blog_article(
+        "이동식주택 비용",
+        ["비용", "견적"],
+        persona="price_sensitive",
+    )
+
+    prompt = llm.generate.call_args.args[0]
+    assert "실용적, 구체적 수치 제시" in prompt
+    assert "비용 비교" in prompt
+
+
+@pytest.mark.asyncio
+async def test_blog_article_invalid_persona_uses_fallback():
+    gen = ContentGenerator()
+    llm = MagicMock()
+    llm.model = "test-model"
+    llm.model_fast = "test-fast"
+    llm.generate = MagicMock(return_value="테스트 본문")
+    gen.llm = llm
+
+    _ = await gen.generate_blog_article(
+        "이동식주택 비용",
+        ["비용", "견적"],
+        persona="totally_invalid_persona",
+    )
+
+    prompt = llm.generate.call_args.args[0]
+    assert "균형적" in prompt
+    assert "이동식주택 소개" in prompt
