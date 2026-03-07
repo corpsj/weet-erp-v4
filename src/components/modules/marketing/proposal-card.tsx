@@ -5,7 +5,7 @@ import { Check, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { MarketingProposal } from '@/types/marketing';
+import { PROPOSAL_STATUS_LABELS, type MarketingProposal } from '@/types/marketing';
 
 export interface Proposal extends MarketingProposal {
   urgency?: string;
@@ -39,7 +39,9 @@ export function ProposalCard({ proposal, onApprove, onReject }: ProposalCardProp
         <div className="flex items-start justify-between mb-3">
           <div className="flex gap-2 flex-wrap">
             <Badge tone="neutral">{proposal.actionType || '알 수 없음'}</Badge>
-            <Badge tone={statusTone(proposal.status)}>{proposal.status}</Badge>
+            <Badge tone={statusTone(proposal.status)}>
+              {PROPOSAL_STATUS_LABELS[proposal.status] ?? proposal.status}
+            </Badge>
           </div>
           {proposal.urgency && (
             <Badge tone={urgencyTone(proposal.urgency)}>{proposal.urgency.toUpperCase()}</Badge>

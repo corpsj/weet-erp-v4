@@ -9,6 +9,7 @@ export type Lead = Pick<MarketingLead, 'id' | 'username' | 'platform' | 'score' 
 
 interface LeadTableProps {
   leads: Lead[];
+  onRowClick?: (lead: Lead) => void;
 }
 
 const stages = Object.keys(JOURNEY_STAGE_LABELS);
@@ -19,7 +20,7 @@ function scoreTone(score: number): 'brand' | 'warning' | 'neutral' {
   return 'neutral';
 }
 
-export function LeadTable({ leads }: LeadTableProps) {
+export function LeadTable({ leads, onRowClick }: LeadTableProps) {
   return (
     <Table>
       <THead>
@@ -39,7 +40,11 @@ export function LeadTable({ leads }: LeadTableProps) {
             const stageIndex = stages.indexOf(lead.journeyStage);
             const progressPercentage = stageIndex === -1 ? 0 : ((stageIndex + 1) / stages.length) * 100;
             return (
-              <TR key={lead.id}>
+              <TR
+                key={lead.id}
+                className={onRowClick ? "cursor-pointer" : undefined}
+                onClick={onRowClick ? () => onRowClick(lead) : undefined}
+              >
                 <TD className="font-medium text-[#ffffff]">{lead.username}</TD>
                 <TD className="text-[#9a9a9a]">{lead.platform}</TD>
                 <TD>

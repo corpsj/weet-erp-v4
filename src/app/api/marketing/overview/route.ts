@@ -41,15 +41,19 @@ export async function GET(request: Request) {
     }
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
       { count: totalLeads, error: leadsCountError },
       { count: pendingProposals, error: proposalsCountError },
       { count: publishedContent, error: contentCountError },
       { data: leadPlatforms, error: leadPlatformsError },
-      { count: leadsChange, error: leadsChangeError },
-      { count: proposalsChange, error: proposalsChangeError },
-      { count: contentChange, error: contentChangeError },
+      { count: leadsThisWeek, error: leadsThisWeekError },
+      { count: leadsLastWeek, error: leadsLastWeekError },
+      { count: proposalsThisWeek, error: proposalsThisWeekError },
+      { count: proposalsLastWeek, error: proposalsLastWeekError },
+      { count: contentThisWeek, error: contentThisWeekError },
+      { count: contentLastWeek, error: contentLastWeekError },
       { data: leadActivities, error: leadActivitiesError },
       { data: proposalActivities, error: proposalActivitiesError },
       { data: contentActivities, error: contentActivitiesError },
@@ -60,15 +64,32 @@ export async function GET(request: Request) {
       supabase.from("marketing_leads").select("platform"),
       supabase.from("marketing_leads").select("id", { count: "exact", head: true }).gt("created_at", sevenDaysAgo),
       supabase
+        .from("marketing_leads")
+        .select("id", { count: "exact", head: true })
+        .lte("created_at", sevenDaysAgo)
+        .gt("created_at", fourteenDaysAgo),
+      supabase
         .from("marketing_proposals")
         .select("id", { count: "exact", head: true })
         .eq("status", "pending")
         .gt("created_at", sevenDaysAgo),
       supabase
+        .from("marketing_proposals")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending")
+        .lte("created_at", sevenDaysAgo)
+        .gt("created_at", fourteenDaysAgo),
+      supabase
         .from("marketing_contents")
         .select("id", { count: "exact", head: true })
         .eq("status", "published")
         .gt("created_at", sevenDaysAgo),
+      supabase
+        .from("marketing_contents")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "published")
+        .lte("created_at", sevenDaysAgo)
+        .gt("created_at", fourteenDaysAgo),
       supabase
         .from("marketing_lead_actions")
         .select("id, action_type, details, performed_at")
@@ -104,16 +125,28 @@ export async function GET(request: Request) {
       throw leadPlatformsError;
     }
 
-    if (leadsChangeError) {
-      throw leadsChangeError;
+    if (leadsThisWeekError) {
+      throw leadsThisWeekError;
     }
 
-    if (proposalsChangeError) {
-      throw proposalsChangeError;
+    if (leadsLastWeekError) {
+      throw leadsLastWeekError;
     }
 
-    if (contentChangeError) {
-      throw contentChangeError;
+    if (proposalsThisWeekError) {
+      throw proposalsThisWeekError;
+    }
+
+    if (proposalsLastWeekError) {
+      throw proposalsLastWeekError;
+    }
+
+    if (contentThisWeekError) {
+      throw contentThisWeekError;
+    }
+
+    if (contentLastWeekError) {
+      throw contentLastWeekError;
     }
 
     if (leadActivitiesError) {
@@ -165,9 +198,9 @@ export async function GET(request: Request) {
       publishedContent: publishedContent ?? 0,
       channelStats,
       trends: {
-        leadsChange: leadsChange ?? 0,
-        proposalsChange: proposalsChange ?? 0,
-        contentChange: contentChange ?? 0,
+        leadsChange: (leadsThisWeek ?? 0) - (leadsLastWeek ?? 0),
+        proposalsChange: (proposalsThisWeek ?? 0) - (proposalsLastWeek ?? 0),
+        contentChange: (contentThisWeek ?? 0) - (contentLastWeek ?? 0),
       },
       recentActivity,
     };

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Check,
   FileText,
@@ -12,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { ModuleShell } from "@/components/layout/module-shell";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/modules/marketing/metric-card";
 import { LeadTable } from "@/components/modules/marketing/lead-table";
 import { ProposalCard } from "@/components/modules/marketing/proposal-card";
@@ -23,7 +25,8 @@ import {
   useMarketingProposals,
   useRejectProposal,
 } from "@/lib/api/hooks/marketing";
-import { formatDate } from "@/lib/utils/format";
+import { markMenuAsRead } from "@/lib/api/actions/hub";
+import { formatDate, formatMonthDay, getRelativeTime } from "@/lib/utils/format";
 import { JOURNEY_STAGE_LABELS } from "@/types/marketing";
 
 const PIPELINE_STAGE_IDS = [
@@ -32,33 +35,16 @@ const PIPELINE_STAGE_IDS = [
   "consideration",
   "decision",
   "conversion",
+  "retention",
 ] as const;
 
-function getRelativeTime(value: string) {
-  const target = new Date(value).getTime();
-  const diff = target - Date.now();
-  const formatter = new Intl.RelativeTimeFormat("ko-KR", { numeric: "auto" });
+type MetricType = "leadsCollected" | "proposalsMade" | "contentsPublished";
 
-  const minutes = Math.round(diff / (1000 * 60));
-  if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
-
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return formatter.format(hours, "hour");
-
-  const days = Math.round(hours / 24);
-  return formatter.format(days, "day");
-}
-
-function formatMonthDay(value: string) {
-  const dateText = formatDate(value);
-  const match = dateText.match(/(\d{1,2})\.\s*(\d{1,2})\./);
-  if (match) {
-    return `${Number(match[1])}/${Number(match[2])}`;
-  }
-
-  const fallbackDate = new Date(value);
-  return `${fallbackDate.getMonth() + 1}/${fallbackDate.getDate()}`;
-}
+const METRIC_LABELS: Record<MetricType, string> = {
+  leadsCollected: "리드 수집",
+  proposalsMade: "제안 생성",
+  contentsPublished: "콘텐츠 발행",
+};
 
 export default function MarketingOverviewPage() {
   return (
@@ -73,15 +59,48 @@ export default function MarketingOverviewPage() {
 }
 
 function MarketingOverviewContent() {
-  const { data: overview, isLoading: isOverviewLoading } = useMarketingOverview();
-  const { data: leads, isLoading: isLeadsLoading } = useMarketingLeads();
-  const { data: proposals, isLoading: isProposalsLoading } = useMarketingProposals();
-  const { data: dailyMetrics, isLoading: isMetricsLoading } = useMarketingDailyMetrics();
+  const [activeMetric, setActiveMetric] = useState<MetricType>("leadsCollected");
+  const {
+    data: overview,
+    isLoading: isOverviewLoading,
+    isError: isOverviewError,
+    refetch: refetchOverview,
+  } = useMarketingOverview();
+  const {
+    data: leads,
+    isLoading: isLeadsLoading,
+    isError: isLeadsError,
+    refetch: refetchLeads,
+  } = useMarketingLeads();
+  const {
+    data: proposals,
+    isLoading: isProposalsLoading,
+    isError: isProposalsError,
+    refetch: refetchProposals,
+  } = useMarketingProposals();
+  const {
+    data: dailyMetrics,
+    isLoading: isMetricsLoading,
+    isError: isMetricsError,
+    refetch: refetchMetrics,
+  } = useMarketingDailyMetrics();
   const approveProposal = useApproveProposal();
   const rejectProposal = useRejectProposal();
 
+  useEffect(() => {
+    void markMenuAsRead("marketing");
+  }, []);
+
   const isLoading =
     isOverviewLoading || isLeadsLoading || isProposalsLoading || isMetricsLoading;
+  const isError = isOverviewError || isLeadsError || isProposalsError || isMetricsError;
+
+  const refetchAll = () => {
+    void refetchOverview();
+    void refetchLeads();
+    void refetchProposals();
+    void refetchMetrics();
+  };
 
   if (isLoading) {
     return (
@@ -97,6 +116,17 @@ function MarketingOverviewContent() {
         <div className="h-64 rounded-md border border-[#2a2a2a] bg-[#141414]" />
         <div className="h-64 rounded-md border border-[#2a2a2a] bg-[#141414]" />
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="mt-4 p-6">
+        <p className="text-sm text-[var(--color-danger)]">마케팅 데이터를 불러오지 못했습니다.</p>
+        <Button className="mt-3" variant="outline" onClick={refetchAll}>
+          다시 시도
+        </Button>
+      </Card>
     );
   }
 
@@ -121,10 +151,7 @@ function MarketingOverviewContent() {
   const sortedDailyMetrics = [...(dailyMetrics ?? [])]
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-14);
-  const maxLeadsCollected = Math.max(
-    ...sortedDailyMetrics.map((item) => item.leadsCollected),
-    0,
-  );
+  const maxMetricValue = Math.max(...sortedDailyMetrics.map((item) => item[activeMetric]), 0);
 
   const stageCounts = PIPELINE_STAGE_IDS.map((stageId) => {
     const count = allLeads.filter((lead) => lead.journeyStage === stageId).length;
@@ -145,8 +172,13 @@ function MarketingOverviewContent() {
 
   function handleReject(id: string) {
     if (rejectProposal.isPending) return;
-    void id;
-    toast.info("제안 페이지에서 거부해주세요");
+    rejectProposal.mutate(
+      { id, reason: "관리자 거부" },
+      {
+        onSuccess: () => toast.success("제안이 거부되었습니다."),
+        onError: () => toast.error("거부에 실패했습니다."),
+      },
+    );
   }
 
   return (
@@ -176,8 +208,23 @@ function MarketingOverviewContent() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-[#ffffff]">일일 리드 수집 추이</h2>
-            <p className="text-xs text-[#9a9a9a]">최근 14일</p>
+            <h2 className="text-lg font-bold text-[#ffffff]">일일 추이</h2>
+            <div className="flex items-center gap-2">
+              {(Object.entries(METRIC_LABELS) as [MetricType, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveMetric(key)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    activeMetric === key
+                      ? "bg-[#1a1a1a] text-[#ffffff]"
+                      : "text-[#9a9a9a] hover:text-[#d4d4d4]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           {sortedDailyMetrics.length === 0 ? (
             <div className="rounded-md border border-[#2a2a2a] bg-[#0a0a0a] p-8 text-center text-[#9a9a9a]">
@@ -187,20 +234,18 @@ function MarketingOverviewContent() {
             <div className="overflow-x-auto">
               <div className="flex min-w-[640px] items-end gap-2 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] p-4">
                 {sortedDailyMetrics.map((metric) => {
-                  const heightRatio =
-                    maxLeadsCollected === 0
-                      ? 0
-                      : metric.leadsCollected / maxLeadsCollected;
+                  const metricValue = metric[activeMetric];
+                  const heightRatio = maxMetricValue === 0 ? 0 : metricValue / maxMetricValue;
                   const barHeight = Math.max(8, Math.round(heightRatio * 140));
 
                   return (
                     <div key={metric.id} className="flex flex-1 flex-col items-center gap-2">
-                      <span className="text-xs text-[#d4d4d4]">{metric.leadsCollected}</span>
+                      <span className="text-xs text-[#d4d4d4]">{metricValue}</span>
                       <div className="flex h-36 w-full items-end rounded bg-[#141414] px-1">
                         <div
                           className="w-full rounded-t bg-[#e5e5e5]"
                           style={{ height: `${barHeight}px` }}
-                          title={`${formatDate(metric.date)} · ${metric.leadsCollected}건`}
+                          title={`${formatDate(metric.date)} · ${metricValue}건`}
                         />
                       </div>
                       <span className="text-[11px] text-[#9a9a9a]">

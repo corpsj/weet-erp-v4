@@ -41,6 +41,32 @@ export type MarketingProposal = {
   createdAt: string;
 };
 
+export type ProposalRow = {
+  id: string;
+  signal_id: string | null;
+  title: string;
+  action_type: string | null;
+  content_draft: string | null;
+  status: string;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+};
+
+export function mapProposal(proposal: ProposalRow): MarketingProposal {
+  return {
+    id: proposal.id,
+    signalId: proposal.signal_id,
+    title: proposal.title,
+    actionType: proposal.action_type,
+    contentDraft: proposal.content_draft,
+    status: proposal.status,
+    approvedAt: proposal.approved_at,
+    rejectionReason: proposal.rejection_reason,
+    createdAt: proposal.created_at,
+  };
+}
+
 export type MarketingContent = {
   id: string;
   channel: string;

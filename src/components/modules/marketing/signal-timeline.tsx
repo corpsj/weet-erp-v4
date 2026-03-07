@@ -60,6 +60,15 @@ export function SignalTimeline({ signals }: SignalTimelineProps) {
               <div className="bg-[#0a0a0a] rounded-lg p-3 text-sm text-[#9a9a9a] border border-[#2a2a2a] font-mono">
                 {signal.summary}
               </div>
+              {signal.keywords.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {signal.keywords.slice(0, 5).map((keyword) => (
+                    <Badge key={keyword} tone="neutral" className="text-xs">
+                      {keyword}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

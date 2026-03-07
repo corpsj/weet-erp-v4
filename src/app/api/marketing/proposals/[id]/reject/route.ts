@@ -1,18 +1,6 @@
 import { ApiError, ok, toErrorResponse } from "@/lib/api/errors";
 import { createRouteClient } from "@/lib/supabase/route";
-import type { MarketingProposal } from "@/types/marketing";
-
-type ProposalRow = {
-  id: string;
-  signal_id: string | null;
-  title: string;
-  action_type: string | null;
-  content_draft: string | null;
-  status: string;
-  approved_at: string | null;
-  rejection_reason: string | null;
-  created_at: string;
-};
+import { type ProposalRow, mapProposal } from "@/types/marketing";
 
 type RejectBody = {
   reason?: string;
@@ -21,20 +9,6 @@ type RejectBody = {
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-function mapProposal(proposal: ProposalRow): MarketingProposal {
-  return {
-    id: proposal.id,
-    signalId: proposal.signal_id,
-    title: proposal.title,
-    actionType: proposal.action_type,
-    contentDraft: proposal.content_draft,
-    status: proposal.status,
-    approvedAt: proposal.approved_at,
-    rejectionReason: proposal.rejection_reason,
-    createdAt: proposal.created_at,
-  };
-}
 
 export async function POST(request: Request, context: RouteContext) {
   try {

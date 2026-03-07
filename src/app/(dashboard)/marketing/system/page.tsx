@@ -21,7 +21,7 @@ export default function SystemPage() {
 }
 
 function SystemContent() {
-  const { data: status, isLoading } = useSystemStatus();
+  const { data: status, isLoading, isError, refetch } = useSystemStatus();
 
   const schedulerRunning = status?.scheduler.running ?? false;
   const ollamaConnected = status?.ollama.connected ?? false;
@@ -46,6 +46,13 @@ function SystemContent() {
             <div key={i} className="animate-pulse bg-[#141414] rounded-md border border-[#2a2a2a] p-6 h-40" />
           ))}
         </div>
+      ) : isError ? (
+        <Card className="mt-4 p-6">
+          <p className="text-sm text-[var(--color-danger)]">시스템 상태 데이터를 불러오지 못했습니다.</p>
+          <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
+            다시 시도
+          </Button>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="flex h-48 flex-col justify-between">

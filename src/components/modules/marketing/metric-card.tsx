@@ -12,11 +12,11 @@ interface MetricCardProps {
 
 function formatChangeText(change: number) {
   if (change > 0) {
-    return { text: `↑ +${change} 이번 주`, className: "text-green-400" };
+    return { text: `↑ +${change} 전주 대비`, className: "text-green-400" };
   }
 
   if (change < 0) {
-    return { text: `↓ ${change} 이번 주`, className: "text-red-400" };
+    return { text: `↓ ${change} 전주 대비`, className: "text-red-400" };
   }
 
   return { text: "→ 변동없음", className: "text-[#9a9a9a]" };

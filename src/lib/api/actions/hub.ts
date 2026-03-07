@@ -15,6 +15,7 @@ const HUB_MENU_KEYS = [
   "tax_invoices",
   "bank_transactions",
   "vault",
+  "marketing",
 ] as const;
 
 const menuKeySchema = z.enum(HUB_MENU_KEYS);

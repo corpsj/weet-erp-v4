@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import { ModuleShell } from "@/components/layout/module-shell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ContentPreview } from "@/components/modules/marketing/content-preview";
 import { useMarketingContent } from "@/lib/api/hooks/marketing";
 import { CONTENT_STATUS_LABELS } from "@/types/marketing";
@@ -23,7 +26,7 @@ export default function ContentPage() {
 
 function ContentPageBody() {
   const [activeChannel, setActiveChannel] = useState("전체");
-  const { data: contents, isLoading } = useMarketingContent();
+  const { data: contents, isLoading, isError, refetch } = useMarketingContent();
 
   const allContents = useMemo(() => contents ?? [], [contents]);
   const channelCounts = useMemo(() => {
@@ -54,6 +57,28 @@ function ContentPageBody() {
     return counts;
   }, [filteredContents]);
 
+  function exportContentCsv() {
+    const header = "채널,제목,상태,생성일,발행일\n";
+    const rows = filteredContents
+      .map((content) =>
+        [
+          content.channel,
+          content.title ?? "",
+          CONTENT_STATUS_LABELS[content.status] ?? content.status,
+          content.createdAt,
+          content.publishedAt ?? "",
+        ].join(","),
+      )
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `content_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -75,6 +100,9 @@ function ContentPageBody() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-[#9a9a9a]">{filteredContents.length}개의 콘텐츠</p>
+          <Button variant="outline" size="sm" onClick={exportContentCsv}>
+            <Download className="mr-1 h-4 w-4" /> CSV
+          </Button>
           {Object.entries(statusCounts).map(([status, count]) => (
             <Badge key={status} tone="neutral">
               {CONTENT_STATUS_LABELS[status] ?? status} {count}
@@ -99,6 +127,13 @@ function ContentPageBody() {
             </div>
           ))}
         </div>
+      ) : isError ? (
+        <Card className="mt-4 p-6">
+          <p className="text-sm text-[var(--color-danger)]">콘텐츠 데이터를 불러오지 못했습니다.</p>
+          <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
+            다시 시도
+          </Button>
+        </Card>
       ) : filteredContents.length === 0 ? (
         <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-12 text-center">
           <p className="text-[#9a9a9a] text-lg">

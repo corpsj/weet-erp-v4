@@ -7,6 +7,7 @@ import { useMarketingProposals, useApproveProposal, useRejectProposal } from "@/
 import { ProposalCard } from "@/components/modules/marketing/proposal-card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { PROPOSAL_STATUS_LABELS } from "@/types/marketing";
 
 const FILTER_TABS = [
@@ -36,7 +37,7 @@ function ProposalsContent() {
     reason: "",
   });
 
-  const { data: proposals, isLoading } = useMarketingProposals();
+  const { data: proposals, isLoading, isError, refetch } = useMarketingProposals();
   const approveProposal = useApproveProposal();
   const rejectProposal = useRejectProposal();
 
@@ -108,6 +109,13 @@ function ProposalsContent() {
             </div>
           ))}
         </div>
+      ) : isError ? (
+        <Card className="mt-4 p-6">
+          <p className="text-sm text-[var(--color-danger)]">제안 데이터를 불러오지 못했습니다.</p>
+          <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
+            다시 시도
+          </Button>
+        </Card>
       ) : filtered.length === 0 ? (
         <div className="bg-[#141414] rounded-md border border-[#2a2a2a] p-12 text-center">
           <p className="text-[#9a9a9a] text-lg">해당 조건의 제안이 없습니다.</p>

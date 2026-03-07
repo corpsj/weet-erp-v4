@@ -6,6 +6,7 @@ import { ModuleShell } from "@/components/layout/module-shell";
 import { SignalTimeline, type Signal } from "@/components/modules/marketing/signal-timeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { RefreshCw, TrendingUp, Flame } from "lucide-react";
 
 const URGENCY_TABS = [
@@ -30,7 +31,7 @@ export default function SignalsPage() {
 
 function SignalsContent() {
   const [urgencyFilter, setUrgencyFilter] = useState<string | undefined>(undefined);
-  const { data, isLoading } = useMarketingSignals();
+  const { data, isLoading, isError, refetch } = useMarketingSignals();
 
   const signals = (data ?? []).filter(
     (s): s is Signal => s.title !== null && s.summary !== null,
@@ -97,6 +98,13 @@ function SignalsContent() {
                 </div>
               ))}
             </div>
+          ) : isError ? (
+            <Card className="mt-4 p-6">
+              <p className="text-sm text-[var(--color-danger)]">시장 신호 데이터를 불러오지 못했습니다.</p>
+              <Button className="mt-3" variant="outline" onClick={() => void refetch()}>
+                다시 시도
+              </Button>
+            </Card>
           ) : (
             <SignalTimeline signals={filteredSignals} />
           )}
