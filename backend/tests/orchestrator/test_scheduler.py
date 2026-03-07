@@ -49,7 +49,7 @@ def test_dry_run_flag_stored() -> None:
 # ── Wave 3: Scheduler Rewiring Tests ───────────────────────────────────────
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 
 @pytest.fixture
@@ -679,3 +679,322 @@ async def test_proposal_execute_handles_failure(scheduler):
 
     proposal_payload = update_chain.update.call_args[0][0]
     assert proposal_payload["status"] == "execution_failed"
+
+
+@pytest.mark.asyncio
+async def test_journey_check_creates_consultation_on_decide(scheduler):
+    lead_data = {
+        "id": "lead-5",
+        "username": "lead5",
+        "score": 35,
+        "status": "super_hot",
+        "journey_stage": "hesitate",
+        "persona_type": "lifestyle",
+        "metadata": {"encounters": 1, "sources": ["competitor_comment"]},
+        "last_action_at": None,
+    }
+
+    mock_sb = MagicMock()
+    select_chain = MagicMock()
+    select_chain.select.return_value.neq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[lead_data]
+    )
+
+    update_chain = MagicMock()
+    update_chain.update.return_value.eq.return_value.execute.return_value = MagicMock()
+
+    call_count = {"n": 0}
+
+    def table_side_effect(name):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return select_chain
+        return update_chain
+
+    mock_sb.table.side_effect = table_side_effect
+
+    mock_svc = MagicMock()
+    mock_svc.create_consultation.return_value = "cons-uuid"
+
+    with (
+        patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb),
+        patch("app.conversion.consultation.ConsultationService", return_value=mock_svc),
+        patch("app.conversion.consultation.get_supabase", return_value=mock_sb),
+        patch.object(scheduler, "_record_daily_metric"),
+    ):
+        await scheduler._run_journey_check_job()
+
+    mock_svc.create_consultation.assert_called_once()
+    called = mock_svc.create_consultation.call_args.kwargs
+    assert called["lead_id"] == "lead-5"
+    assert called["request_channel"] == "auto_decide"
+    mock_svc.send_conversion_discord_alert.assert_called_once_with(
+        lead_data, "cons-uuid"
+    )
+
+
+@pytest.mark.asyncio
+async def test_content_generate_uses_persona(scheduler):
+    mock_sb = MagicMock()
+
+    persona_chain = MagicMock()
+    persona_chain.select.return_value.neq.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[
+            {"persona_type": "price_sensitive"},
+            {"persona_type": "price_sensitive"},
+            {"persona_type": "lifestyle"},
+        ]
+    )
+    insert_chain = MagicMock()
+    insert_chain.insert.return_value.execute.return_value = MagicMock()
+
+    def table_side_effect(name):
+        if name == "marketing_leads":
+            return persona_chain
+        return insert_chain
+
+    mock_sb.table.side_effect = table_side_effect
+
+    mock_gen = MagicMock()
+    mock_gen.generate_blog_article = AsyncMock(
+        return_value=MagicMock(title="t", body="b")
+    )
+    mock_gen.generate_instagram_caption = AsyncMock(
+        return_value=MagicMock(title="t", body="b")
+    )
+    mock_gen.generate_cafe_post = AsyncMock(return_value=MagicMock(title="t", body="b"))
+
+    with (
+        patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb),
+        patch("app.content.generator.ContentGenerator", return_value=mock_gen),
+        patch.object(
+            scheduler, "_pick_content_topic", return_value=("주제", ["키워드"])
+        ),
+        patch.object(scheduler, "_record_daily_metric"),
+    ):
+        await scheduler._run_content_generate_job()
+
+    mock_gen.generate_blog_article.assert_called_once_with(
+        "주제", ["키워드"], persona="price_sensitive"
+    )
+
+
+@pytest.mark.asyncio
+async def test_content_engagement_job_processes_published(scheduler):
+    mock_sb = MagicMock()
+
+    select_chain = MagicMock()
+    select_chain.select.return_value.eq.return_value.gte.return_value.execute.return_value = MagicMock(
+        data=[{"id": 10, "channel": "instagram", "metadata": {}}]
+    )
+    update_chain = MagicMock()
+    update_chain.update.return_value.eq.return_value.execute.return_value = MagicMock()
+
+    call_count = {"n": 0}
+
+    def table_side_effect(name):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return select_chain
+        return update_chain
+
+    mock_sb.table.side_effect = table_side_effect
+
+    with patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb):
+        await scheduler._run_content_engagement_job()
+
+    update_payload = update_chain.update.call_args[0][0]
+    assert update_payload["engagement_metrics"]["status"] == "pending_collection"
+    assert update_payload["metadata"]["engagement_collected"] is True
+
+
+@pytest.mark.asyncio
+async def test_content_engagement_job_skips_already_collected(scheduler):
+    mock_sb = MagicMock()
+
+    select_chain = MagicMock()
+    select_chain.select.return_value.eq.return_value.gte.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": 11,
+                "channel": "instagram",
+                "metadata": {"engagement_collected": True},
+            }
+        ]
+    )
+    update_chain = MagicMock()
+
+    call_count = {"n": 0}
+
+    def table_side_effect(name):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return select_chain
+        return update_chain
+
+    mock_sb.table.side_effect = table_side_effect
+
+    with patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb):
+        await scheduler._run_content_engagement_job()
+
+    update_chain.update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_suggestion_job_uses_feedback_loop(scheduler):
+    mock_engine = MagicMock()
+    mock_engine.learn_from_results = AsyncMock(
+        return_value={"insights": ["feedback insight"], "approval_rate": 0.4}
+    )
+    mock_engine.generate_suggestions = AsyncMock(return_value=[])
+    mock_engine.propose = AsyncMock()
+
+    with patch(
+        "app.intelligence.suggestion.SuggestionEngine", return_value=mock_engine
+    ):
+        await scheduler._run_suggestion_job()
+
+    mock_engine.learn_from_results.assert_called_once()
+    mock_engine.generate_suggestions.assert_called_once_with(
+        max_proposals=3,
+        prior_insights={"insights": ["feedback insight"], "approval_rate": 0.4},
+    )
+    assert mock_engine.method_calls[:2] == [
+        call.learn_from_results(),
+        call.generate_suggestions(
+            max_proposals=3,
+            prior_insights={"insights": ["feedback insight"], "approval_rate": 0.4},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_evening_followup_uses_persona_dm(scheduler):
+    mock_bridge = AsyncMock()
+    mock_bridge.close = AsyncMock()
+    mock_bridge.engage_instagram_like = AsyncMock(
+        return_value={"success": True, "content": ""}
+    )
+    mock_bridge.engage_instagram_follow = AsyncMock(
+        return_value={"success": True, "content": ""}
+    )
+    mock_bridge.engage_instagram_dm = AsyncMock(
+        return_value={"success": True, "content": ""}
+    )
+
+    warm_result = MagicMock(data=[])
+    hot_result = MagicMock(data=[])
+    super_result = MagicMock(
+        data=[
+            {
+                "id": 301,
+                "username": "슈퍼핫",
+                "score": 35,
+                "journey_stage": "decide",
+                "persona_type": "design",
+            }
+        ]
+    )
+
+    mock_sb = MagicMock()
+    call_count = {"n": 0}
+
+    def table_side_effect(name):
+        chain = MagicMock()
+        chain.select.return_value = chain
+        chain.eq.return_value = chain
+        chain.gte.return_value = chain
+        chain.order.return_value = chain
+        chain.limit.return_value = chain
+
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            chain.execute.return_value = warm_result
+        elif call_count["n"] == 2:
+            chain.execute.return_value = hot_result
+        else:
+            chain.execute.return_value = super_result
+        return chain
+
+    mock_sb.table.side_effect = table_side_effect
+    mock_svc = MagicMock()
+    mock_svc.get_persona_dm.return_value = "페르소나 DM"
+
+    async def execute_real_operation(job, op_name, operation):
+        _ = job, op_name
+        return await operation()
+
+    with (
+        patch("app.orchestrator.scheduler.OpenClawBridge", return_value=mock_bridge),
+        patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb),
+        patch("app.conversion.consultation.ConsultationService", return_value=mock_svc),
+        patch.object(scheduler, "_record_daily_metric"),
+        patch.object(
+            scheduler, "_execute_openclaw_call", side_effect=execute_real_operation
+        ),
+    ):
+        await scheduler._run_evening_followup_job()
+
+    mock_svc.get_persona_dm.assert_called_once_with("슈퍼핫", "design")
+    mock_bridge.engage_instagram_dm.assert_called_once_with("301", "페르소나 DM")
+
+
+@pytest.mark.asyncio
+async def test_content_generate_handles_image_service_exception(scheduler):
+    mock_sb = MagicMock()
+
+    persona_chain = MagicMock()
+    persona_chain.select.return_value.neq.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[{"persona_type": "lifestyle"}]
+    )
+    insert_chain = MagicMock()
+    insert_chain.insert.return_value.execute.return_value = MagicMock()
+
+    def table_side_effect(name):
+        if name == "marketing_leads":
+            return persona_chain
+        return insert_chain
+
+    mock_sb.table.side_effect = table_side_effect
+
+    mock_gen = MagicMock()
+    mock_gen.generate_blog_article = AsyncMock(
+        return_value=MagicMock(title="t", body="b")
+    )
+    mock_gen.generate_instagram_caption = AsyncMock(
+        return_value=MagicMock(title="t", body="b")
+    )
+    mock_gen.generate_cafe_post = AsyncMock(return_value=MagicMock(title="t", body="b"))
+
+    mock_img = MagicMock()
+    mock_img.generate_marketing_image = AsyncMock(side_effect=RuntimeError("API down"))
+
+    with (
+        patch("app.orchestrator.scheduler.get_supabase", return_value=mock_sb),
+        patch("app.content.generator.ContentGenerator", return_value=mock_gen),
+        patch("app.conversion.image_service.ImageService", return_value=mock_img),
+        patch.object(
+            scheduler, "_pick_content_topic", return_value=("주제", ["키워드"])
+        ),
+        patch.object(scheduler, "_record_daily_metric"),
+    ):
+        await scheduler._run_content_generate_job()
+
+    assert insert_chain.insert.call_count == 3
+    insta_call = [
+        c
+        for c in insert_chain.insert.call_args_list
+        if c[0][0].get("channel") == "instagram"
+    ]
+    assert len(insta_call) == 1
+    assert insta_call[0][0][0]["metadata"]["media_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_job_content_engagement_delegates(scheduler):
+    with patch.object(scheduler, "_run_task", new_callable=AsyncMock) as mock_run:
+        await scheduler._job_content_engagement()
+
+    mock_run.assert_called_once_with(
+        "content_engagement", scheduler._run_content_engagement_job
+    )

@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
@@ -98,6 +98,11 @@ class WeetScheduler:
             id="evening_followup",
         )
         _ = self.scheduler.add_job(
+            self._job_content_engagement,
+            CronTrigger(hour=22, minute=0, timezone="Asia/Seoul"),
+            id="content_engagement",
+        )
+        _ = self.scheduler.add_job(
             self._job_proposal_execute,
             CronTrigger(hour=14, minute=0, timezone="Asia/Seoul"),
             id="proposal_execute",
@@ -175,10 +180,17 @@ class WeetScheduler:
         from app.intelligence.suggestion import SuggestionEngine
 
         engine = SuggestionEngine()
-        proposals = await engine.generate_suggestions(max_proposals=3)
+        insights = await engine.learn_from_results()
+        proposals = await engine.generate_suggestions(
+            max_proposals=3, prior_insights=insights
+        )
         for proposal in proposals:
             await engine.propose(proposal)
-        logger.info("Generated %d proposals", len(proposals))
+        logger.info(
+            "Generated %d proposals (insights: %s)",
+            len(proposals),
+            insights.get("insights", []),
+        )
 
     async def _run_daily_report_job(self) -> None:
         from app.core.discord_bot import DiscordBot
@@ -201,7 +213,9 @@ class WeetScheduler:
         sb = get_supabase()
         result = (
             sb.table("marketing_leads")
-            .select("id,username,score,status,journey_stage,metadata,last_action_at")
+            .select(
+                "id,username,score,status,journey_stage,persona_type,metadata,last_action_at"
+            )
             .neq("status", "converted")
             .order("score", desc=True)
             .limit(100)
@@ -261,6 +275,33 @@ class WeetScheduler:
                 ).execute()
                 updated += 1
 
+            if new_stage == "decide" and current_stage != "decide":
+                try:
+                    from app.conversion.consultation import ConsultationService
+
+                    svc = ConsultationService()
+                    consultation_id = svc.create_consultation(
+                        lead_id=lead["id"],
+                        request_channel="auto_decide",
+                        persona_type=lead.get("persona_type"),
+                        metadata={"trigger": "score_threshold", "score": score},
+                    )
+                    if consultation_id:
+                        svc.send_conversion_discord_alert(lead, consultation_id)
+                    self._record_daily_metric("consultations_requested", 1)
+                except Exception as exc:
+                    logger.warning(
+                        "Conversion pipeline failed for @%s: %s",
+                        lead.get("username", "unknown"),
+                        exc,
+                    )
+                logger.info(
+                    "Conversion triggered for @%s (score=%s, persona=%s)",
+                    lead.get("username", "unknown"),
+                    score,
+                    lead.get("persona_type") or "unknown",
+                )
+
         logger.info("Journey check: %d leads updated out of %d", updated, len(leads))
 
     async def _run_content_generate_job(self) -> None:
@@ -271,9 +312,29 @@ class WeetScheduler:
         sb = get_supabase()
 
         topic, keywords = self._pick_content_topic(sb)
+        persona_result = (
+            sb.table("marketing_leads")
+            .select("persona_type")
+            .neq("persona_type", None)
+            .limit(100)
+            .execute()
+        )
+        personas = [
+            row.get("persona_type")
+            for row in (persona_result.data or [])
+            if row.get("persona_type")
+        ]
+        top_persona = (
+            Counter(personas).most_common(1)[0][0] if personas else "lifestyle"
+        )
 
         channels_config = [
-            ("naver_blog", lambda t, kw: gen.generate_blog_article(t, kw)),
+            (
+                "naver_blog",
+                lambda t, kw, p=top_persona: gen.generate_blog_article(
+                    t, kw, persona=p
+                ),
+            ),
             ("instagram", lambda t, kw: gen.generate_instagram_caption(t)),
             ("naver_cafe", lambda t, kw: gen.generate_cafe_post(t)),
         ]
@@ -287,6 +348,18 @@ class WeetScheduler:
 
                 title = getattr(result, "title", topic)
                 body = getattr(result, "body", "")
+                media_path: str | None = None
+                if channel == "instagram":
+                    try:
+                        from app.conversion.image_service import ImageService
+
+                        img_svc = ImageService()
+                        media_path = await img_svc.generate_marketing_image(
+                            topic, top_persona
+                        )
+                    except Exception as exc:
+                        logger.warning("Image generation failed for %s: %s", topic, exc)
+
                 sb.table("marketing_contents").insert(
                     {
                         "channel": channel,
@@ -296,6 +369,8 @@ class WeetScheduler:
                         "metadata": {
                             "topic": topic,
                             "keywords": keywords,
+                            "persona_target": top_persona,
+                            "media_path": media_path,
                             "generated_at": datetime.now(self._kst).isoformat(),
                         },
                     }
@@ -306,6 +381,34 @@ class WeetScheduler:
                 logger.warning("Content generation failed for %s: %s", channel, exc)
 
         self._record_daily_metric("proposals_made", saved)
+
+    async def _run_content_engagement_job(self) -> None:
+        sb = get_supabase()
+        cutoff = (datetime.now(self._kst) - timedelta(hours=72)).isoformat()
+        result = (
+            sb.table("marketing_contents")
+            .select("id,channel,metadata")
+            .eq("status", "published")
+            .gte("published_at", cutoff)
+            .execute()
+        )
+        contents = result.data or []
+        for content in contents:
+            cid = content.get("id")
+            meta = content.get("metadata") or {}
+            if meta.get("engagement_collected"):
+                continue
+
+            sb.table("marketing_contents").update(
+                {
+                    "engagement_metrics": {
+                        "collected_at": datetime.now(self._kst).isoformat(),
+                        "status": "pending_collection",
+                    },
+                    "metadata": {**meta, "engagement_collected": True},
+                }
+            ).eq("id", cid).execute()
+        logger.info("Content engagement check: %d contents processed", len(contents))
 
     def _pick_content_topic(self, sb) -> tuple[str, list[str]]:
         """Pick a topic from recent signals; fall back to evergreen topics."""
@@ -672,11 +775,10 @@ class WeetScheduler:
                     continue
 
                 persona = str(lead_row.get("persona_type") or "일반")
-                stage = str(lead_row.get("journey_stage") or "explore")
-                dm_msg = (
-                    f"안녕하세요 @{username}님! 이동식주택에 관심 가져주셔서 감사해요. "
-                    f"궁금한 점이 있으시면 편하게 DM 주세요 :)"
-                )
+                from app.conversion.consultation import ConsultationService
+
+                svc = ConsultationService()
+                dm_msg = svc.get_persona_dm(username, persona)
                 try:
                     await self._execute_openclaw_call(
                         "evening_followup",
@@ -752,6 +854,9 @@ class WeetScheduler:
             logger.info("Skipping evening_followup outside Instagram hours")
             return
         await self._run_task("evening_followup", self._run_evening_followup_job)
+
+    async def _job_content_engagement(self) -> None:
+        await self._run_task("content_engagement", self._run_content_engagement_job)
 
     def _check_manual_collect_flag(self) -> bool:
         try:
