@@ -3,7 +3,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import content, dashboard, leads, proposals, signals, system
+from app.api.routes import (
+    consultations,
+    content,
+    dashboard,
+    leads,
+    proposals,
+    signals,
+    system,
+)
 
 app = FastAPI(title="WEET Director API", version="1.0.0")
 
@@ -20,3 +28,6 @@ app.include_router(proposals.router, prefix="/api/proposals", tags=["proposals"]
 app.include_router(content.router, prefix="/api/content", tags=["content"])
 app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
 app.include_router(system.router, prefix="/api/system", tags=["system"])
+app.include_router(
+    consultations.router, prefix="/api/consultations", tags=["consultations"]
+)
