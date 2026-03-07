@@ -1,12 +1,23 @@
 "use client";
 
+import { useState } from "react";
+import { toast } from "sonner";
 import { ModuleShell } from "@/components/layout/module-shell";
-import { useSystemStatus, useOpenClawStatus } from "@/lib/api/hooks/marketing";
+import {
+  useSystemStatus,
+  useOpenClawStatus,
+  useCompetitors,
+  useAddCompetitor,
+  useUpdateCompetitor,
+  useDeleteCompetitor,
+} from "@/lib/api/hooks/marketing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils/format";
-import { Bot, Play, Zap } from "lucide-react";
+import type { Competitor } from "@/types/marketing";
+import { Bot, Check, Pencil, Play, Plus, Trash2, X, Zap } from "lucide-react";
 
 export default function SystemPage() {
   return (
@@ -162,6 +173,256 @@ function SystemContent() {
             <Zap className="h-5 w-5 text-[#9a9a9a]" />
           </Button>
         </div>
+      </div>
+
+      <CompetitorSection />
+    </div>
+  );
+}
+
+function CompetitorSection() {
+  const { data: competitors, isLoading, isError, refetch } = useCompetitors();
+  const addCompetitor = useAddCompetitor();
+  const updateCompetitor = useUpdateCompetitor();
+  const deleteCompetitor = useDeleteCompetitor();
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addUsername, setAddUsername] = useState("");
+  const [addDisplayName, setAddDisplayName] = useState("");
+  const [addNotes, setAddNotes] = useState("");
+
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  const [confirmDeleteUsername, setConfirmDeleteUsername] = useState<string | null>(null);
+
+  function handleAdd() {
+    if (!addUsername.trim()) return;
+    addCompetitor.mutate(
+      { username: addUsername.trim(), displayName: addDisplayName.trim(), notes: addNotes.trim() },
+      {
+        onSuccess: () => {
+          toast.success(`@${addUsername.trim()} 등록 완료`);
+          setAddUsername("");
+          setAddDisplayName("");
+          setAddNotes("");
+          setShowAddForm(false);
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  }
+
+  function startEdit(c: Competitor) {
+    setEditingUsername(c.username);
+    setEditDisplayName(c.displayName);
+    setEditNotes(c.notes);
+  }
+
+  function handleSaveEdit(username: string) {
+    updateCompetitor.mutate(
+      { username, displayName: editDisplayName.trim(), notes: editNotes.trim() },
+      {
+        onSuccess: () => {
+          toast.success("수정 완료");
+          setEditingUsername(null);
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  }
+
+  function handleToggleActive(c: Competitor) {
+    updateCompetitor.mutate(
+      { username: c.username, isActive: !c.isActive },
+      {
+        onSuccess: () => toast.success(c.isActive ? "비활성화됨" : "활성화됨"),
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  }
+
+  function handleDelete(username: string) {
+    if (confirmDeleteUsername !== username) {
+      setConfirmDeleteUsername(username);
+      return;
+    }
+    deleteCompetitor.mutate(username, {
+      onSuccess: () => {
+        toast.success(`@${username} 삭제 완료`);
+        setConfirmDeleteUsername(null);
+      },
+      onError: (err) => toast.error(err.message),
+    });
+  }
+
+  return (
+    <div className="bg-[#141414] rounded-md border border-[#2a2a2a] overflow-hidden">
+      <div className="p-6 border-b border-[#2a2a2a] flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-[#ffffff]">경쟁업체 관리</h2>
+          <p className="text-sm text-[#9a9a9a] mt-1">
+            인스타그램 경쟁업체 계정을 관리합니다. 등록된 계정에서 잠재고객을 수집합니다.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowAddForm(!showAddForm)}
+        >
+          <Plus className="mr-1 h-4 w-4" /> 추가
+        </Button>
+      </div>
+
+      {showAddForm && (
+        <div className="p-6 border-b border-[#2a2a2a] bg-[#0a0a0a]">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Input
+              value={addUsername}
+              onChange={(e) => setAddUsername(e.target.value)}
+              placeholder="인스타그램 아이디 (필수)"
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            />
+            <Input
+              value={addDisplayName}
+              onChange={(e) => setAddDisplayName(e.target.value)}
+              placeholder="표시 이름 (선택)"
+            />
+            <Input
+              value={addNotes}
+              onChange={(e) => setAddNotes(e.target.value)}
+              placeholder="메모 (선택)"
+            />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleAdd}
+              disabled={!addUsername.trim() || addCompetitor.isPending}
+            >
+              {addCompetitor.isPending ? "등록 중..." : "등록"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowAddForm(false);
+                setAddUsername("");
+                setAddDisplayName("");
+                setAddNotes("");
+              }}
+            >
+              취소
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6">
+        {isLoading ? (
+          <div className="animate-pulse space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 rounded bg-[#1a1a1a]" />
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-[var(--color-danger)]">경쟁업체 목록을 불러오지 못했습니다.</p>
+            <Button className="mt-3" variant="outline" size="sm" onClick={() => void refetch()}>
+              다시 시도
+            </Button>
+          </div>
+        ) : !competitors || competitors.length === 0 ? (
+          <div className="text-center py-8 rounded-md border border-[#2a2a2a] bg-[#0a0a0a]">
+            <p className="text-sm text-[#9a9a9a]">등록된 경쟁업체가 없습니다.</p>
+            <p className="text-xs text-[#9a9a9a] mt-1">위 &quot;추가&quot; 버튼으로 경쟁업체를 등록하세요.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {competitors.map((c) => (
+              <div
+                key={c.username}
+                className="flex items-center gap-4 rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-4 py-3"
+              >
+                {editingUsername === c.username ? (
+                  <>
+                    <span className="text-sm font-medium text-[#ffffff] w-40 shrink-0">@{c.username}</span>
+                    <Input
+                      value={editDisplayName}
+                      onChange={(e) => setEditDisplayName(e.target.value)}
+                      placeholder="표시 이름"
+                      className="h-8 text-sm flex-1"
+                    />
+                    <Input
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="메모"
+                      className="h-8 text-sm flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveEdit(c.username)}
+                      disabled={updateCompetitor.isPending}
+                      className="rounded p-1.5 text-green-400 hover:bg-[#1a1a1a] transition-colors"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingUsername(null)}
+                      className="rounded p-1.5 text-[#9a9a9a] hover:bg-[#1a1a1a] transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(c)}
+                      className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
+                        c.isActive ? "bg-green-500" : "bg-[#9a9a9a]"
+                      }`}
+                      title={c.isActive ? "활성 (클릭하여 비활성화)" : "비활성 (클릭하여 활성화)"}
+                    />
+                    <span className="text-sm font-medium text-[#ffffff] w-40 shrink-0">
+                      @{c.username}
+                    </span>
+                    <span className="text-sm text-[#d4d4d4] flex-1 truncate">
+                      {c.displayName || ""}
+                    </span>
+                    <span className="text-xs text-[#9a9a9a] flex-1 truncate">
+                      {c.notes || ""}
+                    </span>
+                    <span className="text-xs text-[#9a9a9a] shrink-0 hidden lg:block">
+                      {formatDate(c.addedAt)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(c)}
+                      className="rounded p-1.5 text-[#9a9a9a] hover:bg-[#1a1a1a] hover:text-[#ffffff] transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(c.username)}
+                      className={`rounded p-1.5 transition-colors ${
+                        confirmDeleteUsername === c.username
+                          ? "bg-red-500/20 text-red-400"
+                          : "text-[#9a9a9a] hover:bg-[#1a1a1a] hover:text-red-400"
+                      }`}
+                      title={confirmDeleteUsername === c.username ? "한번 더 클릭하면 삭제됩니다" : "삭제"}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
