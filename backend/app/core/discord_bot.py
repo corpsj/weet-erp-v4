@@ -132,6 +132,9 @@ class DiscordBot:
         """Send a test message to verify webhook connection."""
         return self.send_message("🤖 WEET Director: 연결 테스트 성공!")
 
+    def send_consultation_alert(self, lead_context: str) -> bool:
+        return self.send_alert("hot_lead", lead_context)
+
     def _post(self, payload: dict) -> bool:
         """POST payload to Discord webhook. Returns True on success."""
         if (

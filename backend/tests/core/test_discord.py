@@ -86,6 +86,16 @@ def test_placeholder_webhook_skips_post(bot):
         mock_http.assert_not_called()
 
 
+def test_send_consultation_alert(bot):
+    """Test send_consultation_alert delegates to send_alert."""
+    with patch.object(bot, "send_alert", return_value=True) as mock_alert:
+        result = bot.send_consultation_alert("@hotlead (score: 35, persona: lifestyle)")
+        assert result is True
+        mock_alert.assert_called_once_with(
+            "hot_lead", "@hotlead (score: 35, persona: lifestyle)"
+        )
+
+
 def test_send_proposal_with_content_draft(bot):
     """Test proposal with content draft included."""
     proposal = {
