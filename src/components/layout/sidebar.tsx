@@ -7,6 +7,7 @@ import { ArrowLeft, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NAV_GROUPS, MARKETING_NAV_GROUPS } from "@/lib/navigation";
 import { useUnreadMenuCounts } from "@/lib/api/hooks";
+import { useNotificationUnreadCount } from "@/lib/api/hooks/marketing";
 import { cn } from "@/lib/utils/cn";
 
 type SidebarProps = {
@@ -20,14 +21,18 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
   const pathname = usePathname();
   const isMarketing = pathname.startsWith("/marketing");
   const { data } = useUnreadMenuCounts();
+  const { data: notifCount } = useNotificationUnreadCount();
 
   const unreadMap = useMemo(() => {
     const map = new Map<string, number>();
     (data ?? []).forEach((entry) => {
       map.set(entry.key, entry.count);
     });
+    if (notifCount?.count) {
+      map.set("marketing-notifications", notifCount.count);
+    }
     return map;
-  }, [data]);
+  }, [data, notifCount]);
 
   const navGroups = isMarketing ? MARKETING_NAV_GROUPS : NAV_GROUPS;
 
@@ -83,7 +88,7 @@ export function Sidebar({ collapsed, onNavigate, username, role }: SidebarProps)
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
-                const unread = isMarketing ? 0 : (unreadMap.get(item.key) ?? 0);
+                const unread = unreadMap.get(item.key) ?? 0;
 
                 return (
                   <li key={item.key}>

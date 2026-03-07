@@ -13,6 +13,9 @@ import type {
   OpenClawStatus,
   LeadFilters,
   Competitor,
+  MarketingNotification,
+  NotificationCategory,
+  NotificationUnreadCount,
 } from "@/types/marketing";
 
 export function useMarketingOverview() {
@@ -233,6 +236,46 @@ export function useSignalReport() {
     queryFn: () =>
       fetchApi<SignalReportData>("/api/marketing/signals/report"),
     enabled: false,
+  });
+}
+
+export function useNotifications(category?: NotificationCategory, unreadOnly?: boolean) {
+  return useQuery({
+    queryKey: ["marketing", "notifications", category, unreadOnly],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (category) params.set("category", category);
+      if (unreadOnly) params.set("unread_only", "true");
+      const qs = params.toString();
+      return fetchApi<MarketingNotification[]>(
+        `/api/marketing/notifications${qs ? `?${qs}` : ""}`,
+      );
+    },
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useNotificationUnreadCount() {
+  return useQuery({
+    queryKey: ["marketing", "notifications", "unread-count"],
+    queryFn: () =>
+      fetchApi<NotificationUnreadCount>("/api/marketing/notifications/unread-count"),
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      fetchApi<{ updated: number }>("/api/marketing/notifications/mark-read", {
+        method: "PATCH",
+        body: JSON.stringify({ ids }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "notifications"] });
+    },
   });
 }
 

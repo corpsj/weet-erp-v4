@@ -8,6 +8,7 @@ from app.api.routes import (
     content,
     dashboard,
     leads,
+    notifications,
     proposals,
     signals,
     system,
@@ -30,4 +31,7 @@ app.include_router(signals.router, prefix="/api/signals", tags=["signals"])
 app.include_router(system.router, prefix="/api/system", tags=["system"])
 app.include_router(
     consultations.router, prefix="/api/consultations", tags=["consultations"]
+)
+app.include_router(
+    notifications.router, prefix="/api/notifications", tags=["notifications"]
 )

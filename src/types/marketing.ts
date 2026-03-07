@@ -220,3 +220,54 @@ export type ProposalFilters = {
 export type ContentFilters = {
   channel?: string;
 };
+
+// ============================================================================
+// Notification Types
+// ============================================================================
+
+export type NotificationCategory =
+  | "proposal"
+  | "report"
+  | "lead"
+  | "market"
+  | "error"
+  | "channel"
+  | "journey"
+  | "execution";
+
+export type MarketingNotification = {
+  id: string;
+  category: NotificationCategory;
+  severity: 1 | 2 | 3 | 4;
+  title: string;
+  body: string;
+  actionPath: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type NotificationUnreadCount = {
+  count: number;
+};
+
+export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> = {
+  proposal: "제안",
+  report: "리포트",
+  lead: "리드",
+  market: "시장",
+  error: "오류",
+  channel: "채널",
+  journey: "여정",
+  execution: "실행",
+};
+
+export const NOTIFICATION_CATEGORY_ICONS: Record<NotificationCategory, string> = {
+  proposal: "🎯",
+  report: "📊",
+  lead: "🔥",
+  market: "📢",
+  error: "⚠️",
+  channel: "📱",
+  journey: "🚶",
+  execution: "⚡",
+};
