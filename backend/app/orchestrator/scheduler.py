@@ -121,7 +121,7 @@ class WeetScheduler:
 
     def _can_run_instagram_action(self) -> bool:
         hour = datetime.now(self._kst).hour
-        return 6 <= hour < 23
+        return 7 <= hour < 23
 
     async def _noop(self) -> None:
         return None
@@ -229,26 +229,28 @@ class WeetScheduler:
                         )
                         metadata: dict[str, object] = {}
                         caption = ""
+                        media_path = ""
                         if content_row.data:
                             raw_meta = content_row.data[0].get("metadata")
                             metadata = raw_meta if isinstance(raw_meta, dict) else {}
                             caption = str(content_row.data[0].get("caption") or "")
+                            media_path = str(metadata.get("media_path") or "")
                         format_type = str(metadata.get("format_type", "feed"))
                     except Exception:
                         format_type = "feed"
                         caption = ""
 
                     if format_type == "story":
-                        operation = lambda cid=content_id: (
-                            bridge.publish_instagram_story(cid, "")
+                        operation = lambda cid=content_id, mp=media_path: (
+                            bridge.publish_instagram_story(cid, mp)
                         )
                     elif format_type == "reel":
-                        operation = lambda cid=content_id, cap=caption: (
-                            bridge.publish_instagram_reel(cid, cap, "")
+                        operation = lambda cid=content_id, cap=caption, mp=media_path: (
+                            bridge.publish_instagram_reel(cid, cap, mp)
                         )
                     else:
-                        operation = lambda cid=content_id, cap=caption: (
-                            bridge.publish_instagram_feed(cid, cap, "")
+                        operation = lambda cid=content_id, cap=caption, mp=media_path: (
+                            bridge.publish_instagram_feed(cid, cap, mp)
                         )
 
                     result = await self._execute_openclaw_call(

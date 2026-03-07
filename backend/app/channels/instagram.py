@@ -99,8 +99,16 @@ class InstagramChannel:
 
     def __init__(self) -> None:
         self.discord = DiscordBot()
+        try:
+            supabase = get_supabase()
+        except Exception:
+            supabase = None
         self.limit_tracker = DailyLimitTracker(
-            likes=150, follows=50, comments=30, dms=15
+            likes=150,
+            follows=50,
+            comments=30,
+            dms=15,
+            supabase_client=supabase,
         )
         self._session_cookie: Optional[str] = None  # instagrapi session reuse
         self._instagrapi_wrapper: Optional[InstagrapiClient] = None
