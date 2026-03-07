@@ -30,10 +30,9 @@ def test_settings_load_successfully(env_setup):
     assert isinstance(settings, Settings)
 
 
-def test_ollama_model_primary(env_setup):
-    """Test that ollama.model_primary equals 'qwen3.5:35b'."""
+def test_lmstudio_model(env_setup):
     settings = Settings()
-    assert settings.ollama.model_primary == "qwen3.5:35b"
+    assert settings.lmstudio.model == "huihui-qwen3.5-35b-a3b-abliterated-mlx"
 
 
 def test_scheduler_daily_likes_limit(env_setup):
@@ -79,10 +78,7 @@ def test_scheduler_defaults(env_setup):
     assert settings.scheduler.daily_dms_limit == 15
 
 
-def test_ollama_defaults(env_setup):
-    """Test that Ollama has correct default values."""
+def test_lmstudio_defaults(env_setup):
     settings = Settings()
-    assert settings.ollama.host == "http://localhost:11434"
-    assert settings.ollama.model_fast == "qwen3.5:9b"
-    assert settings.ollama.model_embed == "qwen3-embedding:8b"
-    assert settings.ollama.model_quality == "qwen3.5:122b"
+    assert settings.lmstudio.base_url == "http://localhost:1234/v1"
+    assert settings.lmstudio.model == "huihui-qwen3.5-35b-a3b-abliterated-mlx"

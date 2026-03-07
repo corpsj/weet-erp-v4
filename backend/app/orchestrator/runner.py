@@ -49,7 +49,7 @@ class TaskRunner:
                 return result
             except ConnectionError as exc:
                 logger.warning(
-                    "[%s] Ollama error (attempt %s): %s", task_name, attempt + 1, exc
+                    "[%s] LMStudio error (attempt %s): %s", task_name, attempt + 1, exc
                 )
                 if attempt == self.MAX_RETRIES - 1:
                     result = TaskResult(

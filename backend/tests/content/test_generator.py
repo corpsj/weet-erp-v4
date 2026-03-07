@@ -5,13 +5,11 @@ from app.content.generator import BlogArticle, ContentGenerator
 
 
 class FakeLLM:
-    model_primary: str
-    model_fast: str
+    model: str
     response: str
 
     def __init__(self, response: str):
-        self.model_primary = "qwen3.5:35b"
-        self.model_fast = "qwen3.5:9b"
+        self.model = "huihui-qwen3.5-35b-a3b-abliterated-mlx"
         self.response = response
 
     def generate(

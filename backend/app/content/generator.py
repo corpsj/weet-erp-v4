@@ -7,8 +7,7 @@ from app.core.prompts import CONTENT_GENERATION_PROMPT
 
 
 class LLMClient(Protocol):
-    model_primary: str
-    model_fast: str
+    model: str
 
     def generate(
         self,
@@ -91,7 +90,7 @@ class ContentGenerator:
             keywords=", ".join(keywords),
             persona=persona or "일반 독자",
         )
-        body = self.llm.generate(prompt, model=self.llm.model_primary, system=system)
+        body = self.llm.generate(prompt, model=self.llm.model, system=system)
         body = self.brand_voice.add_cta(body, "blog")
 
         title = topic if "블로그" in topic else f"{topic} - 이동식주택 전문 위트 안내"
@@ -113,7 +112,7 @@ class ContentGenerator:
             f"이미지 설명: {image_desc or '이동식주택 외관'}\n"
             f"감성적 훅으로 시작하고, 핵심 정보를 담은 후 연락처로 마무리하세요."
         )
-        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        body = self.llm.generate(prompt, model=self.llm.model, system=system)
         return Caption(
             topic=topic,
             body=self.brand_voice.add_cta(body, "instagram"),
@@ -129,7 +128,7 @@ class ContentGenerator:
             f"주제: {topic}\n"
             f"카페 성격: {cafe_context or '이동식주택 관심자 커뮤니티'}"
         )
-        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        body = self.llm.generate(prompt, model=self.llm.model, system=system)
         return CafePost(
             topic=topic,
             title=f"[정보] {topic}",
@@ -146,7 +145,7 @@ class ContentGenerator:
             f"주제: {topic}\n"
             "구성: 훅(5초) -> 본론 -> 마무리 CTA"
         )
-        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        body = self.llm.generate(prompt, model=self.llm.model, system=system)
         return Script(topic=topic, title=topic, body=body, format=format)
 
     async def generate_daangn_post(
@@ -159,7 +158,7 @@ class ContentGenerator:
             f"특징: {', '.join(features)}\n"
             "친근하고 신뢰감 있게 작성하세요."
         )
-        body = self.llm.generate(prompt, model=self.llm.model_fast, system=system)
+        body = self.llm.generate(prompt, model=self.llm.model, system=system)
         return DaangnPost(
             product=product,
             title=f"{product} - {CONTACT}",

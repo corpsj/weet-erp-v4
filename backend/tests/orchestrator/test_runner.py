@@ -27,12 +27,12 @@ async def test_run_dry_run_skips_coro() -> None:
 
 async def test_run_connection_error_retries_and_fails() -> None:
     runner = TaskRunner()
-    coro = AsyncMock(side_effect=ConnectionError("ollama offline"))
+    coro = AsyncMock(side_effect=ConnectionError("lmstudio offline"))
 
     result = await runner.run("suggestion_run", coro)
 
     assert result.success is False
-    assert "ollama offline" in str(result.error)
+    assert "lmstudio offline" in str(result.error)
     assert coro.await_count == runner.MAX_RETRIES
 
 

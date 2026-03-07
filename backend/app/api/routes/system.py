@@ -10,7 +10,7 @@ class SystemStatus(BaseModel):
     """System status response."""
 
     scheduler: str
-    ollama: str
+    lmstudio: str
     naver_quota: int
     youtube_quota: int
 
@@ -27,7 +27,7 @@ async def get_status() -> SystemStatus:
     """Get system component status."""
     return SystemStatus(
         scheduler="running",
-        ollama="unknown",
+        lmstudio="unknown",
         naver_quota=0,
         youtube_quota=0,
     )

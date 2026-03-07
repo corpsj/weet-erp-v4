@@ -5,14 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import ClassVar
 
 
-class OllamaConfig(BaseModel):
-    """Ollama LLM service configuration."""
+class LMStudioConfig(BaseModel):
+    """LMStudio LLM service configuration (OpenAI-compatible API)."""
 
-    host: str = "http://localhost:11434"
-    model_primary: str = "qwen3.5:35b"
-    model_fast: str = "qwen3.5:9b"
-    model_embed: str = "qwen3-embedding:8b"
-    model_quality: str = "qwen3.5:122b"
+    base_url: str = "http://localhost:1234/v1"
+    model: str = "huihui-qwen3.5-35b-a3b-abliterated-mlx"
 
 
 class NaverConfig(BaseModel):
@@ -66,7 +63,7 @@ class Settings(BaseSettings):
         env_file=".env", env_nested_delimiter="__", extra="ignore"
     )
 
-    ollama: OllamaConfig = OllamaConfig()
+    lmstudio: LMStudioConfig = LMStudioConfig()
     naver: NaverConfig = NaverConfig(client_id="", client_secret="")
     youtube: YouTubeConfig = YouTubeConfig(api_key="")
     discord: DiscordConfig = DiscordConfig()
