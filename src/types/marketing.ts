@@ -128,6 +128,23 @@ export type MarketingSetting = {
   updatedAt: string;
 };
 
+export type Competitor = {
+  username: string;
+  displayName: string;
+  notes: string;
+  isActive: boolean;
+  addedAt: string;
+};
+
+export const SOURCE_LABELS: Record<string, string> = {
+  competitor_comment: "경쟁사 댓글",
+  naver_cafe_question: "카페 질문",
+  high_intent_hashtag: "해시태그",
+  competitor_liker: "경쟁사 좋아요",
+  youtube_commenter: "유튜브 댓글",
+  competitor_follower: "경쟁사 팔로워",
+};
+
 export const CONTENT_STATUS_LABELS: Record<string, string> = {
   draft: "초안",
   review: "검토 중",

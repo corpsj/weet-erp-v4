@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { LeadTable } from "@/components/modules/marketing/lead-table";
 import { useMarketingLeads } from "@/lib/api/hooks/marketing";
 import { formatDate } from "@/lib/utils/format";
-import { JOURNEY_STAGE_LABELS, type MarketingLead } from "@/types/marketing";
+import { JOURNEY_STAGE_LABELS, SOURCE_LABELS, type MarketingLead } from "@/types/marketing";
 
 const STAGE_TABS = [
   { id: undefined, label: "전체" },
@@ -70,7 +70,7 @@ function LeadsContent() {
   }, [debouncedSearch, leads, sortBy, stage]);
 
   function exportLeadsCsv() {
-    const header = "사용자,플랫폼,점수,페르소나,여정단계,소스,수집일\n";
+    const header = "사용자,플랫폼,점수,페르소나,여정단계,수집 경로,수집일\n";
     const rows = filteredLeads
       .map((lead) =>
         [
@@ -79,7 +79,7 @@ function LeadsContent() {
           lead.score,
           lead.personaType ?? "",
           JOURNEY_STAGE_LABELS[lead.journeyStage] ?? lead.journeyStage,
-          lead.source ?? "",
+          SOURCE_LABELS[lead.source ?? ""] ?? lead.source ?? "",
           lead.createdAt,
         ].join(","),
       )
@@ -198,9 +198,9 @@ function LeadsContent() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-[#9a9a9a]">소스</p>
+                <p className="text-xs text-[#9a9a9a]">수집 경로</p>
                 <p className="text-sm font-medium text-[#ffffff]">
-                  {selectedLead.source ?? "알 수 없음"}
+                  {SOURCE_LABELS[selectedLead.source ?? ""] ?? selectedLead.source ?? "알 수 없음"}
                 </p>
               </div>
             </div>
@@ -208,6 +208,21 @@ function LeadsContent() {
               <p className="text-xs text-[#9a9a9a]">수집일</p>
               <p className="text-sm text-[#ffffff]">{formatDate(selectedLead.createdAt)}</p>
             </div>
+            {selectedLead.metadata && Object.keys(selectedLead.metadata).length > 0 && (
+              <div>
+                <p className="text-xs text-[#9a9a9a] mb-2">수집 상세</p>
+                <div className="rounded-md border border-[#2a2a2a] bg-[#0a0a0a] p-3 space-y-1">
+                  {Object.entries(selectedLead.metadata).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between text-sm">
+                      <span className="text-[#9a9a9a]">{key}</span>
+                      <span className="text-[#ffffff] truncate max-w-[200px]" title={String(value)}>
+                        {String(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>

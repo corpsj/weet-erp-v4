@@ -3,9 +3,9 @@
 import React from 'react';
 import { Table, THead, TBody, TH, TD, TR, TableEmpty } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { JOURNEY_STAGE_LABELS, type MarketingLead } from '@/types/marketing';
+import { JOURNEY_STAGE_LABELS, SOURCE_LABELS, type MarketingLead } from '@/types/marketing';
 
-export type Lead = Pick<MarketingLead, 'id' | 'username' | 'platform' | 'score' | 'personaType' | 'journeyStage'>;
+export type Lead = Pick<MarketingLead, 'id' | 'username' | 'platform' | 'score' | 'personaType' | 'journeyStage' | 'source'>;
 
 interface LeadTableProps {
   leads: Lead[];
@@ -27,6 +27,7 @@ export function LeadTable({ leads, onRowClick }: LeadTableProps) {
         <tr>
           <TH>사용자</TH>
           <TH>플랫폼</TH>
+          <TH>수집 경로</TH>
           <TH>점수</TH>
           <TH>페르소나</TH>
           <TH>여정 단계</TH>
@@ -34,7 +35,7 @@ export function LeadTable({ leads, onRowClick }: LeadTableProps) {
       </THead>
       <TBody>
         {leads.length === 0 ? (
-          <TableEmpty colSpan={5} />
+          <TableEmpty colSpan={6} />
         ) : (
           leads.map((lead) => {
             const stageIndex = stages.indexOf(lead.journeyStage);
@@ -47,6 +48,11 @@ export function LeadTable({ leads, onRowClick }: LeadTableProps) {
               >
                 <TD className="font-medium text-[#ffffff]">{lead.username}</TD>
                 <TD className="text-[#9a9a9a]">{lead.platform}</TD>
+                <TD>
+                  <Badge tone="neutral">
+                    {SOURCE_LABELS[lead.source ?? ''] ?? lead.source ?? '알 수 없음'}
+                  </Badge>
+                </TD>
                 <TD>
                   <Badge tone={scoreTone(lead.score)}>{lead.score}점</Badge>
                 </TD>
