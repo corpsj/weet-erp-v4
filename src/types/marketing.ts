@@ -77,6 +77,8 @@ export type MarketingContent = {
   personaTarget: string | null;
   createdAt: string;
   publishedAt: string | null;
+  publishedBy: 'manual' | 'openclaw';
+  openclawJobId?: string | null;
 };
 
 export type MarketSignal = {
@@ -170,6 +172,18 @@ export type SystemStatus = {
 
 export type SystemStatusResponse = {
   data: SystemStatus;
+};
+
+export type OpenClawAgent = {
+  id: string;
+  model: string;
+};
+
+export type OpenClawStatus = {
+  status: "online" | "offline";
+  agents: OpenClawAgent[];
+  skillsCount: number;
+  lastChecked: string;
 };
 
 // ============================================================================
