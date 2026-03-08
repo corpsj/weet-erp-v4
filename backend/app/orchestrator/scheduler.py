@@ -1457,12 +1457,22 @@ class WeetScheduler:
         youtube_channel = YouTubeLeadChannel()
         bridge = OpenClawBridge()
         try:
-            commenters = await instagram_channel.get_competitor_commenters()
-            likers = await instagram_channel.get_competitor_likers()
+            commenters_raw = await instagram_channel.get_competitor_commenters()
+            likers_raw = await instagram_channel.get_competitor_likers()
+            hashtag_users_raw = await instagram_channel.get_hashtag_users()
             naver_leads = await naver_channel.collect_leads()
             youtube_leads = await youtube_channel.collect_leads()
 
-            total_leads = commenters + likers + naver_leads + youtube_leads
+            commenters = commenters_raw if isinstance(commenters_raw, list) else []
+            likers = likers_raw if isinstance(likers_raw, list) else []
+            hashtag_users = (
+                hashtag_users_raw if isinstance(hashtag_users_raw, list) else []
+            )
+            naver_leads = naver_leads if isinstance(naver_leads, list) else []
+            youtube_leads = youtube_leads if isinstance(youtube_leads, list) else []
+            total_leads = (
+                commenters + likers + hashtag_users + naver_leads + youtube_leads
+            )
 
             self._record_daily_metric("leads_collected", len(total_leads))
 

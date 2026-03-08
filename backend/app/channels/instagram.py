@@ -377,6 +377,85 @@ class InstagramChannel:
 
         return leads
 
+    async def get_hashtag_users(
+        self, hashtag: Optional[str] = None
+    ) -> list[LeadCandidate]:
+        """Collect leads from hashtag post likers via instagrapi."""
+        if not self._is_operating_hours():
+            logger.info("Outside operating hours, skipping hashtag users")
+            return []
+        if self._is_in_cooldown():
+            logger.info("Skipping lead collection: in action block cooldown")
+            return []
+
+        client = await self._get_authenticated_client()
+        if client is None:
+            return []
+
+        if hashtag:
+            hashtags = [hashtag]
+        else:
+            raw_hashtags = get_instagram_settings("instagram_hashtags")
+            hashtags = [item for item in raw_hashtags if isinstance(item, str)]
+
+        if not hashtags:
+            logger.info("No hashtags configured")
+            return []
+
+        leads: list[LeadCandidate] = []
+        for tag in hashtags:
+            try:
+                await asyncio.sleep(self._random_delay())
+                medias = await self._run_sync(
+                    lambda: client.hashtag_medias_recent(tag, amount=20)
+                )
+
+                for media in medias:
+                    try:
+                        await asyncio.sleep(self._random_delay())
+                        likers = await self._run_sync(
+                            lambda: client.media_likers(media.pk)
+                        )
+                        for liker in likers:
+                            if self._is_bot_account(liker.username):
+                                continue
+                            lead = LeadCandidate(
+                                username=liker.username,
+                                platform="instagram",
+                                source=f"hashtag_{tag}",
+                                metadata={"hashtag": tag},
+                            )
+                            await self.save_lead_to_db(lead)
+                            leads.append(lead)
+                    except Exception as exc:
+                        exc_text = str(exc).lower()
+                        if (
+                            "action_block" in exc_text
+                            or "action blocked" in exc_text
+                            or "temporarily blocked" in exc_text
+                        ):
+                            self._handle_action_block()
+                            return leads
+                        logger.error(
+                            "Error fetching hashtag likers for media %s: %s",
+                            media.pk,
+                            exc,
+                        )
+                        continue
+            except Exception as exc:
+                exc_text = str(exc).lower()
+                if (
+                    "action_block" in exc_text
+                    or "action blocked" in exc_text
+                    or "temporarily blocked" in exc_text
+                ):
+                    self._handle_action_block()
+                    return leads
+                logger.error("Error collecting users from hashtag %s: %s", tag, exc)
+                continue
+
+        return leads
+
     async def like_post(self, post_id: str) -> bool:
         """Like a post via instagrapi with rate limit, delay, and action block handling."""
         if not self._is_operating_hours():

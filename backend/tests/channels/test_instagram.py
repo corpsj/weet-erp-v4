@@ -296,6 +296,32 @@ async def test_bot_filtering_in_collection(channel):
 
 
 @pytest.mark.asyncio
+async def test_get_hashtag_users(channel):
+    """Collects leads from hashtag posts via instagrapi."""
+    mock_liker = MagicMock()
+    mock_liker.username = "귀촌꿈꾸는사람"
+    mock_media = MagicMock()
+    mock_media.pk = 55555
+    mock_ig_client = MagicMock()
+    mock_ig_client.hashtag_medias_recent.return_value = [mock_media]
+    mock_ig_client.media_likers.return_value = [mock_liker]
+
+    with (
+        patch.object(channel, "_is_operating_hours", return_value=True),
+        patch.object(channel, "_is_in_cooldown", return_value=False),
+        patch.object(channel, "_get_authenticated_client", return_value=mock_ig_client),
+        patch("app.channels.instagram.get_instagram_settings", return_value=["귀촌"]),
+        patch.object(channel, "save_lead_to_db", return_value=1),
+        patch("asyncio.sleep", return_value=None),
+    ):
+        leads = await channel.get_hashtag_users()
+
+    assert len(leads) == 1
+    assert leads[0].username == "귀촌꿈꾸는사람"
+    assert "hashtag" in leads[0].source
+
+
+@pytest.mark.asyncio
 async def test_cooldown_blocks_lead_collection(channel):
     """Lead collection is blocked during action block cooldown."""
     with (
