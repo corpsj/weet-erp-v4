@@ -93,7 +93,7 @@ class LeadDiscovery:
     def __init__(self):
         self.scorer: LeadScorer = LeadScorer()
         self.persona_classifier: PersonaClassifier = PersonaClassifier()
-        self.discord: NotificationService = NotificationService()
+        self.notifier: NotificationService = NotificationService()
         self.limit_tracker: DailyLimitTracker = DailyLimitTracker()
 
     def _random_delay(self) -> float:
@@ -153,7 +153,7 @@ class LeadDiscovery:
         )
 
         if self.scorer.is_hot_lead(scored.score):
-            _ = self.discord.send_alert(
+            _ = self.notifier.send_alert(
                 "hot_lead",
                 (
                     f"🔥 핫리드 감지: @{username} "

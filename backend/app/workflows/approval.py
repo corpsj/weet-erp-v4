@@ -66,7 +66,7 @@ class ApprovalWorkflow:
         }
         return bool(self.notifier.send_proposal(payload))
 
-    async def on_discord_reaction(
+    async def on_reaction(
         self, proposal_id: int, reaction: str
     ) -> ApprovalResult:
         if reaction == "approve":
@@ -126,7 +126,7 @@ class ApprovalWorkflow:
     ) -> ApprovalResult:
         payload = data or {}
         if action == "approve":
-            result = await self.on_discord_reaction(proposal_id, "approve")
+            result = await self.on_reaction(proposal_id, "approve")
             self.notifier.send_alert(
                 "market_change",
                 f"대시보드 승인: 제안 #{proposal_id}",
@@ -155,7 +155,7 @@ class ApprovalWorkflow:
             )
 
         if action == "modify":
-            result = await self.on_discord_reaction(proposal_id, "modify")
+            result = await self.on_reaction(proposal_id, "modify")
             self.notifier.send_alert(
                 "market_change",
                 f"대시보드 수정 요청: 제안 #{proposal_id}",

@@ -25,7 +25,7 @@ class NaverBlogChannel:
 
     def __init__(self):
         self.generator = ContentGenerator()
-        self.discord = NotificationService()
+        self.notifier = NotificationService()
 
     async def generate_draft(self, topic: str, keywords: list[str]) -> BlogDraft:
         """Generate a blog article draft using AI."""
@@ -39,7 +39,7 @@ class NaverBlogChannel:
         # Save to DB
         draft.id = await self._save_draft(draft)
         # Notify via Discord
-        self.discord.send_message(
+        self.notifier.send_message(
             f"\U0001f4dd \uc0c8 \ube14\ub85c\uadf8 \ucd08\uc548\uc774 \uc900\ube44\ub410\uc2b5\ub2c8\ub2e4!\n"
             f"\uc81c\ubaa9: {draft.title}\n"
             f"\uae38\uc774: {len(draft.body)}\uc790\n"

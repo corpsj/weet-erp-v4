@@ -24,7 +24,7 @@ class ProposalData:
 class SuggestionEngine:
     def __init__(self):
         self.llm = LLMService()
-        self.discord = NotificationService()
+        self.notifier = NotificationService()
 
     async def generate_suggestions(
         self,
@@ -120,7 +120,7 @@ class SuggestionEngine:
             return None
 
         proposal_id = await self._save_proposal(proposal)
-        self.discord.send_proposal(
+        self.notifier.send_proposal(
             {
                 "title": proposal.title,
                 "signal": proposal.rationale,
@@ -158,16 +158,16 @@ class SuggestionEngine:
                 "status": "approved",
                 "approved_at": datetime.now(timezone.utc).isoformat(),
             }
-            self.discord.send_message(f"✅ 제안 승인됨: {proposal_title}")
+            self.notifier.send_message(f"✅ 제안 승인됨: {proposal_title}")
         elif action == "rejected":
             update_payload = {"status": "rejected"}
             if feedback:
                 update_payload["rejection_reason"] = feedback
             suffix = f" (사유: {feedback})" if feedback else ""
-            self.discord.send_message(f"❌ 제안 거부됨: {proposal_title}{suffix}")
+            self.notifier.send_message(f"❌ 제안 거부됨: {proposal_title}{suffix}")
         elif action == "modified":
             update_payload = {"status": "pending"}
-            self.discord.send_message(f"✏️ 제안 수정 요청: {proposal_title}")
+            self.notifier.send_message(f"✏️ 제안 수정 요청: {proposal_title}")
 
         if not update_payload:
             return True

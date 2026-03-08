@@ -309,7 +309,7 @@ class WeetScheduler:
                             metadata={"trigger": "score_threshold", "score": score},
                         )
                         if consultation_id:
-                            svc.send_conversion_discord_alert(lead, consultation_id)
+                            svc.send_conversion_alert(lead, consultation_id)
                         self._record_daily_metric("consultations_requested", 1)
                     except Exception as exc:
                         logger.warning(

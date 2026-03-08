@@ -116,7 +116,7 @@ class InstagramChannel:
     """
 
     def __init__(self) -> None:
-        self.discord = NotificationService()
+        self.notifier = NotificationService()
         try:
             supabase = get_supabase()
         except Exception:
@@ -152,7 +152,7 @@ class InstagramChannel:
             self._cooldown_until,
         )
         try:
-            self.discord.send_alert(
+            self.notifier.send_alert(
                 "error",
                 f"Instagram 액션 블록 감지! 24시간 쿨다운 시작. 종료: {self._cooldown_until}",
             )

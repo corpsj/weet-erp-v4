@@ -48,7 +48,7 @@ class MarketRadar:
     def __init__(self):
         self.naver = NaverClient()
         self.youtube = YouTubeClient()
-        self.discord = NotificationService()
+        self.notifier = NotificationService()
         self._llm: Optional[LLMService] = None
 
     async def scan_news(self, keywords: Optional[list[str]] = None) -> list[Signal]:
@@ -165,7 +165,7 @@ class MarketRadar:
         # Alert critical signals
         critical = [s for s in signals if s.urgency == "critical"]
         for sig in critical:
-            self.discord.send_alert("urgent", f"🚨 시장 신호: {sig.title}")
+            self.notifier.send_alert("urgent", f"🚨 시장 신호: {sig.title}")
 
         return signals
 

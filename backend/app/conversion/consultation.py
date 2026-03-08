@@ -43,7 +43,7 @@ DEFAULT_DM_TEMPLATE = (
 
 class ConsultationService:
     def __init__(self) -> None:
-        self.discord = NotificationService()
+        self.notifier = NotificationService()
         self._kst = ZoneInfo("Asia/Seoul")
 
     def create_consultation(
@@ -138,7 +138,7 @@ class ConsultationService:
         template = PERSONA_DM_TEMPLATES.get(persona_type or "", DEFAULT_DM_TEMPLATE)
         return template.format(username=username)
 
-    def send_conversion_discord_alert(
+    def send_conversion_alert(
         self, lead: dict[str, Any], consultation_id: str
     ) -> None:
         username = lead.get("username", "unknown")
@@ -159,4 +159,4 @@ class ConsultationService:
             f"경쟁사: {', '.join(comp_names) if comp_names else 'N/A'}\n"
             f"상담 ID: {consultation_id}"
         )
-        self.discord.send_alert("hot_lead", msg)
+        self.notifier.send_alert("hot_lead", msg)
