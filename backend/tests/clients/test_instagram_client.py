@@ -1,10 +1,11 @@
 """Tests for InstagrapiClient wrapper."""
 
 import os
+from datetime import datetime, timedelta
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 
-from app.clients.instagram_client import InstagrapiClient
+from app.clients.instagram_client import InstagramRateLimitError, InstagrapiClient
 
 
 @pytest.fixture
@@ -110,3 +111,54 @@ def test_logout_clears_client(client):
         client.login()
     client.logout()
     assert client._client is None
+
+
+def test_get_direct_threads_returns_threads(client):
+    mock_ig_client = MagicMock()
+    mock_ig_client.direct_threads.return_value = ["thread-1"]
+    client._client = mock_ig_client
+
+    result = client.get_direct_threads(amount=10)
+
+    assert result == ["thread-1"]
+    mock_ig_client.direct_threads.assert_called_once_with(amount=10)
+
+
+def test_get_direct_threads_rate_limited_sets_cooldown(client):
+    from instagrapi.exceptions import PleaseWaitFewMinutes
+
+    mock_ig_client = MagicMock()
+    mock_ig_client.direct_threads.side_effect = PleaseWaitFewMinutes("wait")
+    client._client = mock_ig_client
+
+    with pytest.raises(InstagramRateLimitError):
+        client.get_direct_threads()
+
+    assert client.get_cooldown_until() is not None
+
+
+def test_get_thread_messages_returns_messages(client):
+    mock_ig_client = MagicMock()
+    mock_ig_client.direct_messages.return_value = ["message-1"]
+    client._client = mock_ig_client
+
+    result = client.get_thread_messages(thread_id="123", amount=3)
+
+    assert result == ["message-1"]
+    mock_ig_client.direct_messages.assert_called_once_with(thread_id=123, amount=3)
+
+
+def test_get_thread_messages_invalid_thread_id_returns_empty(client):
+    mock_ig_client = MagicMock()
+    client._client = mock_ig_client
+
+    result = client.get_thread_messages(thread_id="abc", amount=3)
+
+    assert result == []
+    mock_ig_client.direct_messages.assert_not_called()
+
+
+def test_is_in_cooldown_true_when_future_timestamp(client):
+    client._cooldown_until = datetime.now() + timedelta(minutes=31)
+
+    assert client.is_in_cooldown() is True

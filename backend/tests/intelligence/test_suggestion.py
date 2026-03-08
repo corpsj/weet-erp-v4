@@ -141,6 +141,51 @@ async def test_learn_from_results_empty(engine):
 
 
 @pytest.mark.asyncio
+async def test_learn_from_results_includes_content_performance_insights(engine):
+    mock_sb = MagicMock()
+
+    proposals_chain = MagicMock()
+    proposals_chain.select.return_value.execute.return_value = MagicMock(
+        data=[
+            {"status": "approved", "action_type": "content"},
+            {"status": "rejected", "action_type": "outreach"},
+        ]
+    )
+
+    settings_chain = MagicMock()
+    settings_chain.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "value": {
+                    "top_topics": [
+                        {"name": "이동식주택", "avg_score": 24.5, "count": 4}
+                    ],
+                    "top_channels": [
+                        {"name": "instagram", "avg_score": 18.0, "count": 6}
+                    ],
+                }
+            }
+        ]
+    )
+
+    def table_side_effect(name):
+        if name == "marketing_proposals":
+            return proposals_chain
+        if name == "marketing_settings":
+            return settings_chain
+        return MagicMock()
+
+    mock_sb.table.side_effect = table_side_effect
+
+    with patch("app.intelligence.suggestion.get_supabase", return_value=mock_sb):
+        result = await engine.learn_from_results()
+
+    assert result["total"] == 2
+    assert any("최고 성과 콘텐츠 주제" in insight for insight in result["insights"])
+    assert any("최고 성과 채널" in insight for insight in result["insights"])
+
+
+@pytest.mark.asyncio
 async def test_generate_suggestions_with_prior_insights(engine):
     engine.llm.analyze.return_value = {
         "title": "맞춤 제안",

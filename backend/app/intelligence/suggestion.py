@@ -209,6 +209,32 @@ class SuggestionEngine:
         if approval_rate < 0.5:
             insights.append("승인율이 50% 미만 — 제안 품질 개선 필요")
 
+        try:
+            content_result = (
+                sb.table("marketing_settings")
+                .select("value")
+                .eq("key", "content_performance_insights")
+                .limit(1)
+                .execute()
+            )
+            perf_rows = content_result.data or []
+            if perf_rows:
+                perf = perf_rows[0].get("value") or {}
+                top_topics = perf.get("top_topics") or []
+                top_channels = perf.get("top_channels") or []
+                if top_topics:
+                    best_topic = top_topics[0]
+                    insights.append(
+                        f"최고 성과 콘텐츠 주제: '{best_topic['name']}' (평균 참여도: {best_topic['avg_score']}, {best_topic['count']}건)"
+                    )
+                if top_channels:
+                    best_ch = top_channels[0]
+                    insights.append(
+                        f"최고 성과 채널: '{best_ch['name']}' (평균 참여도: {best_ch['avg_score']})"
+                    )
+        except Exception:
+            pass
+
         return {
             "total": total,
             "approved": approved,

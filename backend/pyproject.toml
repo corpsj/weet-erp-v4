@@ -20,6 +20,7 @@ dependencies = [
     "httpx>=0.25.0",
     "uvicorn>=0.24.0",
     "openclaw-sdk>=2.1.0",
+    "google-generativeai>=0.8.5",
 ]
 
 [project.optional-dependencies]

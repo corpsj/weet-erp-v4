@@ -2,9 +2,8 @@
 
 import logging
 import os
-from datetime import datetime
-from pathlib import Path
-from typing import ClassVar
+from datetime import datetime, timedelta
+from typing import Any, ClassVar, cast
 
 from instagrapi import Client
 from instagrapi.exceptions import (
@@ -15,6 +14,10 @@ from instagrapi.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class InstagramRateLimitError(RuntimeError):
+    pass
 
 
 class InstagrapiClient:
@@ -50,7 +53,12 @@ class InstagrapiClient:
         """
         try:
             client = Client()
-            client.challenge_code_handler = self._challenge_callback
+            client.challenge_code_handler = cast(
+                Any,
+                lambda username, choice=None: self._challenge_callback(
+                    username, choice
+                ),
+            )
 
             if os.path.exists(self._session_path):
                 logger.info("Loading saved session for %s", self._username)
@@ -63,7 +71,12 @@ class InstagrapiClient:
                         self._username,
                     )
                     client = Client()
-                    client.challenge_code_handler = self._challenge_callback
+                    client.challenge_code_handler = cast(
+                        Any,
+                        lambda username, choice=None: self._challenge_callback(
+                            username, choice
+                        ),
+                    )
                     client.login(self._username, self._password)
             else:
                 logger.info("No saved session, fresh login for %s", self._username)
@@ -91,14 +104,14 @@ class InstagrapiClient:
             logger.error("Login failed for %s: %s", self._username, exc)
             return False
 
-    def _challenge_callback(self, username: str, choice: int) -> str:
+    def _challenge_callback(self, username: str, choice: int | None = None) -> str:
         """Handle Instagram 2FA/checkpoint challenge.
 
         Called by instagrapi when Instagram requests verification.
         Logs warning and returns empty string (extend later for Discord/stdin).
         """
         logger.warning(
-            "Instagram challenge required for %s, choice=%d", username, choice
+            "Instagram challenge required for %s, choice=%s", username, choice
         )
         return ""
 
@@ -121,3 +134,60 @@ class InstagrapiClient:
             logger.warning("Logout error for %s: %s", self._username, exc)
         finally:
             self._client = None
+
+    def is_in_cooldown(self) -> bool:
+        if self._cooldown_until is None:
+            return False
+        return datetime.now() < self._cooldown_until
+
+    def get_cooldown_until(self) -> datetime | None:
+        return self._cooldown_until
+
+    def _set_cooldown(self, minutes: int = 30) -> None:
+        self._cooldown_until = datetime.now() + timedelta(minutes=max(30, minutes))
+
+    def get_direct_threads(self, amount: int = 20):
+        if self._client is None:
+            raise RuntimeError("Instagram client is not authenticated")
+        if self.is_in_cooldown():
+            return []
+        try:
+            return self._client.direct_threads(amount=amount)
+        except PleaseWaitFewMinutes as exc:
+            self._set_cooldown(30)
+            raise InstagramRateLimitError(
+                "Instagram DM thread API rate limited"
+            ) from exc
+        except Exception as exc:
+            if "please wait" in str(exc).lower():
+                self._set_cooldown(30)
+                raise InstagramRateLimitError(
+                    "Instagram DM thread API temporarily blocked"
+                ) from exc
+            raise
+
+    def get_thread_messages(self, thread_id: str, amount: int = 5):
+        if self._client is None:
+            raise RuntimeError("Instagram client is not authenticated")
+        if self.is_in_cooldown():
+            return []
+        try:
+            normalized_thread_id = int(thread_id)
+            return self._client.direct_messages(
+                thread_id=normalized_thread_id, amount=amount
+            )
+        except ValueError:
+            logger.warning("Invalid thread id for direct_messages: %s", thread_id)
+            return []
+        except PleaseWaitFewMinutes as exc:
+            self._set_cooldown(30)
+            raise InstagramRateLimitError(
+                "Instagram DM message API rate limited"
+            ) from exc
+        except Exception as exc:
+            if "please wait" in str(exc).lower():
+                self._set_cooldown(30)
+                raise InstagramRateLimitError(
+                    "Instagram DM message API temporarily blocked"
+                ) from exc
+            raise

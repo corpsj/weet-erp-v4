@@ -20,23 +20,26 @@ logger = logging.getLogger(__name__)
 
 async def run_once(dry_run: bool = False):
     runner = TaskRunner(notifier=NotificationService(), dry_run=dry_run)
-    task_names = [
-        "daily_reset",
-        "market_scan",
-        "suggestion_run",
-        "daily_report",
-        "journey_check",
-        "content_generate",
-        "content_publish",
-        "lead_hunt",
-        "evening_followup",
+    scheduler = WeetScheduler(runner=runner, dry_run=dry_run)
+
+    job_sequence = [
+        ("daily_reset", scheduler._run_daily_reset_job),
+        ("market_scan", scheduler._run_market_scan_job),
+        ("suggestion_run", scheduler._run_suggestion_job),
+        ("daily_report", scheduler._run_daily_report_job),
+        ("journey_check", scheduler._run_journey_check_job),
+        ("content_generate", scheduler._run_content_generate_job),
+        ("proposal_execute", scheduler._run_proposal_execute_job),
+        ("content_publish", scheduler._run_content_publish_job),
+        ("lead_hunt", scheduler._run_lead_hunt_job),
+        ("dm_monitor", scheduler._run_dm_monitor_job),
+        ("evening_followup", scheduler._run_evening_followup_job),
+        ("content_engagement", scheduler._run_content_engagement_job),
+        ("content_feedback", scheduler._run_content_feedback_job),
     ]
 
-    async def noop() -> None:
-        return None
-
-    for task_name in task_names:
-        result = await runner.run(task_name, noop)
+    for task_name, job_fn in job_sequence:
+        result = await runner.run(task_name, job_fn)
         status = "OK" if result.success else f"FAIL({result.error})"
         logger.info("[PIPELINE] %s: %s", task_name, status)
 

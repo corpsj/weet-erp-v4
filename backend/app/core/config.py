@@ -62,3 +62,5 @@ class Settings(BaseSettings):
     instagram: InstagramConfig = InstagramConfig()
     scheduler: SchedulerConfig = SchedulerConfig()
     openclaw: OpenClawSettings = OpenClawSettings()
+    google_api_key: str = ""
+    gemini_image_model: str = "imagen-3.0-generate-002"
