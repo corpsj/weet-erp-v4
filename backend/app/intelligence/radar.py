@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 from typing import Optional
 from app.clients.naver import NaverClient
 from app.clients.youtube import YouTubeClient
+from app.core.config import Settings
 from app.core.llm import LLMService
 from app.core.notification_service import NotificationService
 from app.db.session import get_supabase
@@ -46,6 +47,7 @@ class MarketRadar:
     """Scans Naver + YouTube for market signals relevant to WEET modular housing."""
 
     def __init__(self):
+        self.settings = Settings()
         self.naver = NaverClient()
         self.youtube = YouTubeClient()
         self.notifier = NotificationService()
@@ -125,6 +127,12 @@ class MarketRadar:
 
     async def scan_youtube(self, keywords: Optional[list[str]] = None) -> list[Signal]:
         """Scan YouTube for trending videos on modular housing topics."""
+        if not self.settings.youtube.api_key or self.settings.youtube.api_key in (
+            "",
+            "your_youtube_api_key_here",
+        ):
+            logger.warning("YouTube API key not configured, skipping YouTube scan")
+            return []
         keywords = keywords or ["이동식주택", "모듈러주택"]
         signals = []
         for keyword in keywords[:1]:  # YouTube quota is expensive (100 units/search)

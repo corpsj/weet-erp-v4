@@ -1,9 +1,11 @@
 """YouTube Data API v3 client for video and comment collection."""
 
+import logging
 import httpx
 from pydantic import BaseModel
 from app.core.config import Settings
 
+logger = logging.getLogger(__name__)
 settings = Settings()
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
@@ -34,6 +36,14 @@ class YouTubeClient:
 
     def __init__(self):
         self.api_key = settings.youtube.api_key
+        # Check if API key is configured
+        if not self.api_key or self.api_key in ("", "your_youtube_api_key_here"):
+            logger.warning(
+                "YouTubeClient: API key not configured, all methods will return empty results"
+            )
+            self._disabled = True
+        else:
+            self._disabled = False
 
     def _check_quota(self, cost: int = 1):
         if self._quota_used + cost > self.DAILY_QUOTA:
@@ -44,6 +54,8 @@ class YouTubeClient:
 
     async def search_videos(self, query: str, max_results: int = 10) -> list[VideoItem]:
         """Search YouTube videos for given query. Costs 100 units."""
+        if self._disabled:
+            return []
         self._check_quota(100)
         async with httpx.AsyncClient(timeout=15) as client:
             try:
@@ -83,6 +95,8 @@ class YouTubeClient:
 
     async def get_comments(self, video_id: str, max_results: int = 20) -> list[Comment]:
         """Get top comments for a video. Costs 1 unit."""
+        if self._disabled:
+            return []
         self._check_quota(1)
         async with httpx.AsyncClient(timeout=15) as client:
             try:
@@ -118,6 +132,8 @@ class YouTubeClient:
         self, channel_id: str, max_results: int = 10
     ) -> list[VideoItem]:
         """Get recent videos from a specific channel. Costs 1 unit."""
+        if self._disabled:
+            return []
         self._check_quota(1)
         async with httpx.AsyncClient(timeout=15) as client:
             try:

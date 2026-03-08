@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from app.clients.error_classifier import SUCCESS, classify_response, get_retry_strategy
 from app.clients.openclaw import OpenClawBridge
+from app.core.config import Settings
 from app.db.session import get_supabase
 
 AsyncIOScheduler = import_module("apscheduler.schedulers.asyncio").AsyncIOScheduler
@@ -29,8 +30,6 @@ class WeetScheduler:
         "instagram",
         "naver-blog",
         "youtube",
-        "daangn",
-        "kakao",
     )
     MARKET_SCAN_KEYWORDS: tuple[str, ...] = (
         "인테리어",
@@ -1452,16 +1451,27 @@ class WeetScheduler:
         from app.channels.naver_cafe import NaverCafeChannel
         from app.channels.youtube import YouTubeChannel as YouTubeLeadChannel
 
+        settings = Settings()
         instagram_channel = InstagramChannel()
         naver_channel = NaverCafeChannel()
-        youtube_channel = YouTubeLeadChannel()
         bridge = OpenClawBridge()
         try:
             commenters_raw = await instagram_channel.get_competitor_commenters()
             likers_raw = await instagram_channel.get_competitor_likers()
             hashtag_users_raw = await instagram_channel.get_hashtag_users()
             naver_leads = await naver_channel.collect_leads()
-            youtube_leads = await youtube_channel.collect_leads()
+
+            if settings.youtube.api_key and settings.youtube.api_key not in (
+                "",
+                "your_youtube_api_key_here",
+            ):
+                youtube_channel = YouTubeLeadChannel()
+                youtube_leads = await youtube_channel.collect_leads()
+            else:
+                logger.info(
+                    "YouTube API key not configured, skipping YouTube lead hunt"
+                )
+                youtube_leads = []
 
             commenters = commenters_raw if isinstance(commenters_raw, list) else []
             likers = likers_raw if isinstance(likers_raw, list) else []
