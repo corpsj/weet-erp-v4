@@ -246,6 +246,30 @@ export type MarketingNotification = {
   createdAt: string;
 };
 
+export type NotificationRow = {
+  id: string;
+  category: string;
+  severity: number;
+  title: string;
+  body: string;
+  action_path: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+export function mapNotification(row: NotificationRow): MarketingNotification {
+  return {
+    id: row.id,
+    category: row.category as NotificationCategory,
+    severity: row.severity as 1 | 2 | 3 | 4,
+    title: row.title,
+    body: row.body,
+    actionPath: row.action_path,
+    isRead: row.read_at !== null,
+    createdAt: row.created_at,
+  };
+}
+
 export type NotificationUnreadCount = {
   count: number;
 };

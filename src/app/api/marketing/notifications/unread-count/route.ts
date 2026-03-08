@@ -1,8 +1,5 @@
 import { ApiError, ok, toErrorResponse } from "@/lib/api/errors";
 import { createRouteClient } from "@/lib/supabase/route";
-import type { NotificationUnreadCount } from "@/types/marketing";
-
-const BACKEND_URL = "http://localhost:8000";
 
 export async function GET() {
   try {
@@ -15,17 +12,16 @@ export async function GET() {
       throw new ApiError("UNAUTHORIZED", "로그인이 필요합니다.");
     }
 
-    const res = await fetch(`${BACKEND_URL}/api/notifications/unread-count`, {
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(5000),
-    });
+    const { count, error } = await supabase
+      .from("marketing_notifications")
+      .select("id", { count: "exact", head: true })
+      .is("read_at", null);
 
-    if (!res.ok) {
-      throw new ApiError("INTERNAL_ERROR", "읽지 않은 알림 수를 불러오지 못했습니다.");
+    if (error) {
+      throw error;
     }
 
-    const data: NotificationUnreadCount = await res.json();
-    return ok(data);
+    return ok({ count: count ?? 0 });
   } catch (error) {
     return toErrorResponse(error);
   }

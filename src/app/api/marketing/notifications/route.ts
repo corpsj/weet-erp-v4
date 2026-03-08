@@ -1,9 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ApiError, ok, toErrorResponse } from "@/lib/api/errors";
 import { createRouteClient } from "@/lib/supabase/route";
-import type { MarketingNotification } from "@/types/marketing";
-
-const BACKEND_URL = "http://localhost:8000";
+import { type NotificationRow, mapNotification } from "@/types/marketing";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,21 +14,30 @@ export async function GET(request: NextRequest) {
       throw new ApiError("UNAUTHORIZED", "로그인이 필요합니다.");
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const qs = searchParams.toString();
-    const url = `${BACKEND_URL}/api/notifications${qs ? `?${qs}` : ""}`;
+    const category = request.nextUrl.searchParams.get("category");
+    const unreadOnly = request.nextUrl.searchParams.get("unread_only") === "true";
+    const limit = Number(request.nextUrl.searchParams.get("limit") ?? "50");
 
-    const res = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-    });
+    let query = supabase
+      .from("marketing_notifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-    if (!res.ok) {
-      throw new ApiError("INTERNAL_ERROR", "알림 목록을 불러오지 못했습니다.");
+    if (category) {
+      query = query.eq("category", category);
+    }
+    if (unreadOnly) {
+      query = query.is("read_at", null);
     }
 
-    const notifications: MarketingNotification[] = await res.json();
-    return ok(notifications);
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return ok(((data ?? []) as NotificationRow[]).map(mapNotification));
   } catch (error) {
     return toErrorResponse(error);
   }
