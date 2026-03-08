@@ -3,6 +3,10 @@ import asyncio
 import logging
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.core.notification_service import NotificationService
 from app.orchestrator.runner import TaskRunner
 from app.orchestrator.scheduler import WeetScheduler
