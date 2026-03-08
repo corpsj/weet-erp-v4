@@ -219,7 +219,7 @@ class LLMClient(Protocol):
     ) -> str: ...
 
 
-class DiscordClient(Protocol):
+class NotifierClient(Protocol):
     def send_alert(self, alert_type: str, message: str) -> bool: ...
 
 

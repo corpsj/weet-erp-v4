@@ -160,10 +160,10 @@ def test_get_persona_dm_unknown_persona(service: ConsultationService) -> None:
     assert message == DEFAULT_DM_TEMPLATE.format(username="alice")
 
 
-def test_send_conversion_discord_alert(service: ConsultationService) -> None:
-    mock_discord = MagicMock()
+def test_send_conversion_alert(service: ConsultationService) -> None:
+    mock_notifier = MagicMock()
     with patch(
-        "app.conversion.consultation.NotificationService", return_value=mock_discord
+        "app.conversion.consultation.NotificationService", return_value=mock_notifier
     ):
         service = ConsultationService()
 
@@ -179,10 +179,10 @@ def test_send_conversion_discord_alert(service: ConsultationService) -> None:
         },
     }
 
-    service.send_conversion_discord_alert(lead, "cons-uuid")
+    service.send_conversion_alert(lead, "cons-uuid")
 
-    mock_discord.send_alert.assert_called_once()
-    alert_type, message = mock_discord.send_alert.call_args[0]
+    mock_notifier.send_alert.assert_called_once()
+    alert_type, message = mock_notifier.send_alert.call_args[0]
     assert alert_type == "hot_lead"
     assert "@hotlead" in message
     assert "cons-uuid" in message

@@ -47,7 +47,7 @@ async def test_run_rate_limit_stops_immediately() -> None:
     assert coro.await_count == 1
 
 
-async def test_run_sends_discord_alert_on_failure() -> None:
+async def test_run_sends_notifier_alert_on_failure() -> None:
     notifier = MagicMock()
     runner = TaskRunner(notifier=notifier)
     coro = AsyncMock(side_effect=RuntimeError("rate limit"))

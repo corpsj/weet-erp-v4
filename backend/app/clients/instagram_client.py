@@ -108,7 +108,7 @@ class InstagrapiClient:
         """Handle Instagram 2FA/checkpoint challenge.
 
         Called by instagrapi when Instagram requests verification.
-        Logs warning and returns empty string (extend later for Discord/stdin).
+        Logs warning and returns empty string (extend later for notifier/stdin).
         """
         logger.warning(
             "Instagram challenge required for %s, choice=%s", username, choice

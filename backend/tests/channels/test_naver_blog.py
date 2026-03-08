@@ -9,7 +9,7 @@ from app.channels.naver_blog import NaverBlogChannel, BlogDraft
 @pytest.fixture
 def channel():
     ch = NaverBlogChannel()
-    ch.discord = MagicMock()
+    ch.notifier = MagicMock()
     # Mock the content generator
     from app.content.generator import BlogArticle
 
@@ -36,11 +36,11 @@ async def test_generate_draft_creates_db_entry(channel):
 
 
 @pytest.mark.asyncio
-async def test_generate_draft_sends_discord_notification(channel):
+async def test_generate_draft_sends_notifier_notification(channel):
     with patch.object(channel, "_save_draft", new_callable=AsyncMock, return_value=1):
         await channel.generate_draft("이동식주택 허가", ["허가"])
-    channel.discord.send_message.assert_called_once()
-    msg = channel.discord.send_message.call_args[0][0]
+    channel.notifier.send_message.assert_called_once()
+    msg = channel.notifier.send_message.call_args[0][0]
     assert "수동" in msg  # Manual publish reminder
     assert "Write API" in msg or "블로그" in msg
 

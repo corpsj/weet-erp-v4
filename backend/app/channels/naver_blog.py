@@ -38,7 +38,7 @@ class NaverBlogChannel:
         )
         # Save to DB
         draft.id = await self._save_draft(draft)
-        # Notify via Discord
+        # Notify via notifier
         self.notifier.send_message(
             f"\U0001f4dd \uc0c8 \ube14\ub85c\uadf8 \ucd08\uc548\uc774 \uc900\ube44\ub410\uc2b5\ub2c8\ub2e4!\n"
             f"\uc81c\ubaa9: {draft.title}\n"

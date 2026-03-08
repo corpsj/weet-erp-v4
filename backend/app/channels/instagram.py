@@ -145,7 +145,7 @@ class InstagramChannel:
         return datetime.now(timezone.utc) < self._cooldown_until
 
     def _handle_action_block(self) -> None:
-        """Handle Instagram action block: set 24h cooldown + Discord alert."""
+        """Handle Instagram action block: set 24h cooldown + notifier alert."""
         self._cooldown_until = datetime.now(timezone.utc) + timedelta(hours=24)
         logger.error(
             "Instagram ACTION_BLOCK detected. Cooldown until %s",
@@ -157,7 +157,7 @@ class InstagramChannel:
                 f"Instagram 액션 블록 감지! 24시간 쿨다운 시작. 종료: {self._cooldown_until}",
             )
         except Exception as exc:
-            logger.warning("Failed to send Discord alert for action block: %s", exc)
+            logger.warning("Failed to send notifier alert for action block: %s", exc)
 
     def _random_delay(self) -> float:
         """Return random delay between MIN_DELAY and MAX_DELAY seconds."""

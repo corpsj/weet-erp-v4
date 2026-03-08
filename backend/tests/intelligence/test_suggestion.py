@@ -8,7 +8,7 @@ from app.intelligence.suggestion import ProposalData, SuggestionEngine
 def engine():
     instance = SuggestionEngine()
     instance.llm = MagicMock()
-    instance.discord = MagicMock()
+    instance.notifier = MagicMock()
     return instance
 
 
@@ -57,7 +57,7 @@ async def test_generate_suggestions_with_signals(engine):
 
 
 @pytest.mark.asyncio
-async def test_propose_sends_discord_message(engine):
+async def test_propose_sends_notifier_message(engine):
     with patch.object(
         engine, "_is_duplicate", new_callable=AsyncMock, return_value=False
     ):
@@ -73,8 +73,8 @@ async def test_propose_sends_discord_message(engine):
             result = await engine.propose(proposal)
 
     assert result == 42
-    engine.discord.send_proposal.assert_called_once()
-    sent = engine.discord.send_proposal.call_args[0][0]
+    engine.notifier.send_proposal.assert_called_once()
+    sent = engine.notifier.send_proposal.call_args[0][0]
     assert "테스트 제안" in sent["title"]
 
 
@@ -89,7 +89,7 @@ async def test_propose_skips_duplicate(engine):
         result = await engine.propose(proposal)
 
     assert result is None
-    engine.discord.send_proposal.assert_not_called()
+    engine.notifier.send_proposal.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -104,8 +104,8 @@ async def test_handle_response_approved(engine):
         result = await engine.handle_response(1, "approved")
 
     assert result is True
-    engine.discord.send_message.assert_called_once()
-    assert "승인" in engine.discord.send_message.call_args[0][0]
+    engine.notifier.send_message.assert_called_once()
+    assert "승인" in engine.notifier.send_message.call_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -122,8 +122,8 @@ async def test_handle_response_rejected_with_reason(engine):
         )
 
     assert result is True
-    engine.discord.send_message.assert_called_once()
-    assert "거부" in engine.discord.send_message.call_args[0][0]
+    engine.notifier.send_message.assert_called_once()
+    assert "거부" in engine.notifier.send_message.call_args[0][0]
 
 
 @pytest.mark.asyncio

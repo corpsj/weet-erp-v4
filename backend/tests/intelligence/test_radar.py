@@ -56,7 +56,7 @@ def radar(mock_naver, mock_youtube):
     r = MarketRadar()
     r.naver = mock_naver
     r.youtube = mock_youtube
-    r.discord = MagicMock()
+    r.notifier = MagicMock()
     return r
 
 
@@ -92,7 +92,7 @@ async def test_run_full_scan_aggregates_all_sources(radar):
 
 
 @pytest.mark.asyncio
-async def test_critical_signal_triggers_discord_alert(radar):
+async def test_critical_signal_triggers_notifier_alert(radar):
     critical_signal = Signal(
         source="naver_news",
         signal_type="policy",
@@ -106,8 +106,8 @@ async def test_critical_signal_triggers_discord_alert(radar):
                 with patch.object(radar, "scan_youtube", return_value=[]):
                     with patch.object(radar, "_save_signals", new_callable=AsyncMock):
                         await radar.run_full_scan()
-    radar.discord.send_alert.assert_called_once()
-    alert_args = radar.discord.send_alert.call_args[0]
+    radar.notifier.send_alert.assert_called_once()
+    alert_args = radar.notifier.send_alert.call_args[0]
     assert "긴급: 이동식주택 규제 변화" in alert_args[1]
 
 

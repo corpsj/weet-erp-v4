@@ -53,7 +53,7 @@ async def test_execute_duplicate_prevention(notifier):
 
 
 @pytest.mark.asyncio
-async def test_execute_sends_discord_report(notifier):
+async def test_execute_sends_notifier_report(notifier):
     executor = ActionExecutor(notifier=notifier)
     proposal = {"id": 4, "action_type": "urgent", "title": "리포트 테스트"}
 
@@ -66,7 +66,7 @@ async def test_execute_sends_discord_report(notifier):
 
 
 @pytest.mark.asyncio
-async def test_execute_failure_sends_discord_alert(notifier):
+async def test_execute_failure_sends_notifier_alert(notifier):
     executor = ActionExecutor(notifier=notifier)
     executor._execute_content = AsyncMock(side_effect=RuntimeError("boom"))
     proposal = {"id": 5, "action_type": "content", "title": "실패 테스트"}

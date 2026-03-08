@@ -839,9 +839,7 @@ async def test_journey_check_creates_consultation_on_decide(scheduler):
     called = mock_svc.create_consultation.call_args.kwargs
     assert called["lead_id"] == "lead-5"
     assert called["request_channel"] == "auto_decide"
-    mock_svc.send_conversion_discord_alert.assert_called_once_with(
-        lead_data, "cons-uuid"
-    )
+    mock_svc.send_conversion_alert.assert_called_once_with(lead_data, "cons-uuid")
 
 
 @pytest.mark.asyncio

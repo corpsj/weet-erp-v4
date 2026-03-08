@@ -10,7 +10,7 @@ from app.leads.discovery import DailyLimitTracker
 @pytest.fixture
 def channel():
     ch = InstagramChannel()
-    ch.discord = MagicMock()
+    ch.notifier = MagicMock()
     return ch
 
 
