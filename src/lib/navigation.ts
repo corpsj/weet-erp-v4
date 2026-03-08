@@ -89,6 +89,7 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
       { key: "marketing-content", label: "게시물", href: "/marketing/content", icon: FileText },
       { key: "marketing-signals", label: "트렌드", href: "/marketing/signals", icon: Radio },
       { key: "marketing-system", label: "운영 현황", href: "/marketing/system", icon: Settings },
+      { key: "marketing-consultations", label: "상담 관리", href: "/marketing/consultations", icon: Users },
       { key: "marketing-notifications", label: "알림 센터", href: "/marketing/notifications", icon: Bell },
     ],
   },

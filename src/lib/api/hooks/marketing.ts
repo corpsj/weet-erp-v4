@@ -16,6 +16,7 @@ import type {
   MarketingNotification,
   NotificationCategory,
   NotificationUnreadCount,
+  MarketingConsultation,
 } from "@/types/marketing";
 
 export function useMarketingOverview() {
@@ -275,6 +276,35 @@ export function useMarkNotificationsRead() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketing", "notifications"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Consultations
+// ---------------------------------------------------------------------------
+
+export function useMarketingConsultations(status?: string) {
+  return useQuery({
+    queryKey: ["marketing", "consultations", status],
+    queryFn: () =>
+      fetchApi<MarketingConsultation[]>(
+        `/api/marketing/consultations${status ? `?status=${status}` : ""}`,
+      ),
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useUpdateConsultationStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
+      fetchApi<MarketingConsultation>(`/api/marketing/consultations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, notes }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing", "consultations"] });
     },
   });
 }

@@ -222,6 +222,67 @@ export type ContentFilters = {
 };
 
 // ============================================================================
+// Consultation Types
+// ============================================================================
+
+export type ConsultationRow = {
+  id: string;
+  lead_id: string;
+  persona_type: string | null;
+  request_channel: string;
+  status: string;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  requested_at: string;
+  scheduled_at: string | null;
+  completed_at: string | null;
+};
+
+export type MarketingConsultation = {
+  id: string;
+  leadId: string;
+  personaType: string | null;
+  requestChannel: string;
+  status: string;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  requestedAt: string;
+  scheduledAt: string | null;
+  completedAt: string | null;
+};
+
+export function mapConsultation(row: ConsultationRow): MarketingConsultation {
+  return {
+    id: row.id,
+    leadId: row.lead_id,
+    personaType: row.persona_type,
+    requestChannel: row.request_channel,
+    status: row.status,
+    notes: row.notes,
+    metadata: row.metadata,
+    requestedAt: row.requested_at,
+    scheduledAt: row.scheduled_at,
+    completedAt: row.completed_at,
+  };
+}
+
+export const CONSULTATION_STATUS_LABELS: Record<string, string> = {
+  requested: "요청됨",
+  scheduled: "예약됨",
+  completed: "상담완료",
+  contracted: "계약",
+  lost: "미전환",
+};
+
+export const CONSULTATION_CHANNEL_LABELS: Record<string, string> = {
+  dm_response: "DM",
+  phone: "전화",
+  kakao: "카카오톡",
+  form: "폼",
+  handoff_keyword: "핸드오프",
+};
+
+// ============================================================================
 // Notification Types
 // ============================================================================
 
