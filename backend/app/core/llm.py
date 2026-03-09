@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from typing import Optional
 
@@ -34,16 +35,21 @@ class LLMService:
                 response = self.client.chat.completions.create(
                     model=use_model, messages=messages
                 )
-                return response.choices[0].message.content
+                content = response.choices[0].message.content or ""
+                return re.sub(
+                    r"<think>.*?</think>\s*", "", content, flags=re.DOTALL
+                ).strip()
             except Exception as e:
                 if attempt == 2:
                     raise ConnectionError(
                         f"LMStudio unavailable after 3 attempts: {e}"
                     ) from e
                 time.sleep(2**attempt)
+        raise ConnectionError("LMStudio unavailable after 3 attempts")
 
     def analyze(self, text: str, task: str) -> dict:
         prompt = f"Analyze the following text for {task}. Respond with valid JSON only.\n\nText: {text}"
+        last_content = ""
         for attempt in range(3):
             try:
                 response = self.client.chat.completions.create(
@@ -56,18 +62,22 @@ class LLMService:
                         {"role": "user", "content": prompt},
                     ],
                 )
-                content = response.choices[0].message.content.strip()
-                if content.startswith("```"):
-                    content = "\n".join(content.split("\n")[1:-1])
-                return json.loads(content)
+                raw = response.choices[0].message.content or ""
+                last_content = re.sub(
+                    r"<think>.*?</think>\s*", "", raw, flags=re.DOTALL
+                ).strip()
+                if last_content.startswith("```"):
+                    last_content = "\n".join(last_content.split("\n")[1:-1])
+                return json.loads(last_content)
             except json.JSONDecodeError:
                 if attempt == 2:
-                    return {"error": "failed to parse JSON", "raw": content}
+                    return {"error": "failed to parse JSON", "raw": last_content}
                 time.sleep(1)
             except Exception as e:
                 if attempt == 2:
                     raise ConnectionError(f"LMStudio unavailable: {e}") from e
                 time.sleep(2**attempt)
+        raise ConnectionError("LMStudio unavailable after 3 attempts")
 
     def classify(self, text: str, categories: list[str]) -> str:
         cats = ", ".join(categories)

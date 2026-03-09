@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.weet.scheduler</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/zoopark-studio/Documents/dev/weet-erp-v4/backend/.venv/bin/python</string>
+		<string>-m</string>
+		<string>app.orchestrator.main</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/zoopark-studio/Documents/dev/weet-erp-v4/backend</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PYTHONUNBUFFERED</key>
+		<string>1</string>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/Users/zoopark-studio/Documents/dev/weet-erp-v4/backend/logs/scheduler.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/zoopark-studio/Documents/dev/weet-erp-v4/backend/logs/scheduler-error.log</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+</dict>
+</plist>
