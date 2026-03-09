@@ -4,10 +4,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ModuleShell } from "@/components/layout/module-shell";
 import { useMarketingProposals, useApproveProposal, useRejectProposal } from "@/lib/api/hooks/marketing";
-import { ProposalCard } from "@/components/modules/marketing/proposal-card";
+import { ProposalCard, type Proposal } from "@/components/modules/marketing/proposal-card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { PROPOSAL_STATUS_LABELS } from "@/types/marketing";
 
 const FILTER_TABS = [
@@ -31,6 +32,7 @@ function ProposalsContent() {
   const [filter, setFilter] = useState("all");
   const [pendingApproveId, setPendingApproveId] = useState<string | null>(null);
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [rejectModal, setRejectModal] = useState<{ open: boolean; proposalId: string | null; reason: string }>({
     open: false,
     proposalId: null,
@@ -128,6 +130,7 @@ function ProposalsContent() {
                 proposal={proposal}
                 onApprove={handleApprove}
                 onReject={handleReject}
+                onClick={setSelectedProposal}
               />
               {(pendingApproveId === proposal.id || pendingRejectId === proposal.id) && (
                 <p className="text-xs text-[#9a9a9a]">처리 중입니다...</p>
@@ -136,6 +139,69 @@ function ProposalsContent() {
           ))}
         </div>
       )}
+
+      <Modal
+        open={selectedProposal !== null}
+        onClose={() => setSelectedProposal(null)}
+        title={selectedProposal?.title ?? "제안 상세"}
+        size="lg"
+      >
+        {selectedProposal && (
+          <div className="space-y-5">
+            <div className="flex gap-2 flex-wrap">
+              <Badge tone="neutral">{selectedProposal.actionType || '알 수 없음'}</Badge>
+              <Badge tone={selectedProposal.status === 'approved' ? 'brand' : selectedProposal.status === 'pending' ? 'warning' : selectedProposal.status === 'rejected' ? 'danger' : 'neutral'}>
+                {PROPOSAL_STATUS_LABELS[selectedProposal.status] ?? selectedProposal.status}
+              </Badge>
+            </div>
+
+            <div className="bg-[#0a0a0a] rounded-md p-4 border border-[#2a2a2a]">
+              <p className="text-sm text-[#cccccc] whitespace-pre-wrap leading-relaxed">
+                {selectedProposal.contentDraft || '내용이 없습니다.'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#666666]">
+              <span>생성일: {new Date(selectedProposal.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              {selectedProposal.approvedAt && (
+                <span>승인일: {new Date(selectedProposal.approvedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              )}
+            </div>
+
+            {selectedProposal.status === 'pending' && (
+              <div className="flex gap-2 pt-2 border-t border-[#2a2a2a]">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    handleApprove(selectedProposal.id);
+                    setSelectedProposal(null);
+                  }}
+                >
+                  승인
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedProposal(null);
+                    handleReject(selectedProposal.id);
+                  }}
+                >
+                  거부
+                </Button>
+              </div>
+            )}
+
+            {selectedProposal.rejectionReason && (
+              <div className="bg-[#1a0a0a] rounded-md p-3 border border-[#3a1a1a]">
+                <p className="text-xs text-[#ff6666]">거부 사유: {selectedProposal.rejectionReason}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={rejectModal.open}

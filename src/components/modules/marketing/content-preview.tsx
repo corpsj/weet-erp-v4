@@ -10,6 +10,7 @@ export type Content = Pick<MarketingContent, 'id' | 'channel' | 'title' | 'body'
 
 interface ContentPreviewProps {
   content: Content;
+  onClick?: (content: Content) => void;
 }
 
 function statusTone(status: string): 'neutral' | 'brand' | 'warning' | 'danger' {
@@ -27,7 +28,7 @@ const channelIcons: Record<string, LucideIcon> = {
   '카카오': MessageCircle,
 };
 
-export function ContentPreview({ content }: ContentPreviewProps) {
+export function ContentPreview({ content, onClick }: ContentPreviewProps) {
   const ChannelIcon = channelIcons[content.channel] || FileText;
   const formattedDate = new Date(content.createdAt).toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -52,8 +53,8 @@ export function ContentPreview({ content }: ContentPreviewProps) {
         ? Math.round(engagementRate * 100)
         : Math.round(engagementRate);
 
-  return (
-    <Card>
+  const cardContent = (
+    <>
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-2 items-center">
           <ChannelIcon className="h-5 w-5 text-[#9a9a9a]" />
@@ -83,6 +84,22 @@ export function ContentPreview({ content }: ContentPreviewProps) {
           조회 {views ?? 0} · 클릭 {clicks ?? 0} · 참여율 {displayRate ?? 0}%
         </p>
       )}
-    </Card>
+
+      {onClick && (
+        <p className="mt-2 text-xs text-[#666666]">클릭하여 전체 내용 보기</p>
+      )}
+    </>
   );
+
+  if (onClick) {
+    return (
+      <Card className="cursor-pointer transition-colors hover:border-[#3a3a3a]">
+        <button type="button" className="w-full text-left" onClick={() => onClick(content)}>
+          {cardContent}
+        </button>
+      </Card>
+    );
+  }
+
+  return <Card>{cardContent}</Card>;
 }

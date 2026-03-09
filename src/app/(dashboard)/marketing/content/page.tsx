@@ -6,7 +6,8 @@ import { ModuleShell } from "@/components/layout/module-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ContentPreview } from "@/components/modules/marketing/content-preview";
+import { ContentPreview, type Content } from "@/components/modules/marketing/content-preview";
+import { Modal } from "@/components/ui/modal";
 import { useMarketingContent } from "@/lib/api/hooks/marketing";
 import { CONTENT_STATUS_LABELS } from "@/types/marketing";
 
@@ -29,6 +30,7 @@ type PublishFilter = "전체" | "수동" | "자동";
 function ContentPageBody() {
   const [activeChannel, setActiveChannel] = useState("전체");
   const [publishFilter, setPublishFilter] = useState<PublishFilter>("전체");
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
   const { data: contents, isLoading, isError, refetch } = useMarketingContent();
 
   const allContents = useMemo(() => contents ?? [], [contents]);
@@ -171,10 +173,71 @@ function ContentPageBody() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {filteredContents.map((content) => (
-            <ContentPreview key={content.id} content={content} />
+            <ContentPreview key={content.id} content={content} onClick={setSelectedContent} />
           ))}
         </div>
       )}
+
+      <Modal
+        open={selectedContent !== null}
+        onClose={() => setSelectedContent(null)}
+        title={selectedContent?.title ?? "게시물 상세"}
+        size="lg"
+      >
+        {selectedContent && (
+          <div className="space-y-5">
+            <div className="flex gap-2 flex-wrap items-center">
+              <Badge tone="neutral">{selectedContent.channel}</Badge>
+              <Badge tone={selectedContent.status === 'published' || selectedContent.status === 'approved' ? 'brand' : 'neutral'}>
+                {CONTENT_STATUS_LABELS[selectedContent.status] || selectedContent.status}
+              </Badge>
+              {selectedContent.publishedBy === 'openclaw' && (
+                <Badge tone="brand">자동 배포</Badge>
+              )}
+            </div>
+
+            <div className="bg-[#0a0a0a] rounded-md p-4 border border-[#2a2a2a]">
+              <p className="text-sm text-[#cccccc] whitespace-pre-wrap leading-relaxed">
+                {selectedContent.body}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#666666]">
+              <span>생성일: {new Date(selectedContent.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              {selectedContent.publishedAt && (
+                <span>발행일: {new Date(selectedContent.publishedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              )}
+            </div>
+
+            {selectedContent.engagementMetrics && Object.keys(selectedContent.engagementMetrics).length > 0 && (
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-[#2a2a2a]">
+                {typeof selectedContent.engagementMetrics.views === 'number' && (
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-[#ffffff]">{selectedContent.engagementMetrics.views as number}</p>
+                    <p className="text-xs text-[#666666]">조회수</p>
+                  </div>
+                )}
+                {typeof selectedContent.engagementMetrics.clicks === 'number' && (
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-[#ffffff]">{selectedContent.engagementMetrics.clicks as number}</p>
+                    <p className="text-xs text-[#666666]">클릭수</p>
+                  </div>
+                )}
+                {typeof selectedContent.engagementMetrics.engagementRate === 'number' && (
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-[#ffffff]">
+                      {(selectedContent.engagementMetrics.engagementRate as number) <= 1
+                        ? Math.round((selectedContent.engagementMetrics.engagementRate as number) * 100)
+                        : Math.round(selectedContent.engagementMetrics.engagementRate as number)}%
+                    </p>
+                    <p className="text-xs text-[#666666]">참여율</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -36,9 +36,9 @@ class LLMService:
                     model=use_model, messages=messages
                 )
                 content = response.choices[0].message.content or ""
-                return re.sub(
-                    r"<think>.*?</think>\s*", "", content, flags=re.DOTALL
-                ).strip()
+                content = re.sub(r"<think>.*?</think>\s*", "", content, flags=re.DOTALL)
+                content = re.sub(r"<think>.*", "", content, flags=re.DOTALL)
+                return content.strip()
             except Exception as e:
                 if attempt == 2:
                     raise ConnectionError(
@@ -65,7 +65,9 @@ class LLMService:
                 raw = response.choices[0].message.content or ""
                 last_content = re.sub(
                     r"<think>.*?</think>\s*", "", raw, flags=re.DOTALL
-                ).strip()
+                )
+                last_content = re.sub(r"<think>.*", "", last_content, flags=re.DOTALL)
+                last_content = last_content.strip()
                 if last_content.startswith("```"):
                     last_content = "\n".join(last_content.split("\n")[1:-1])
                 return json.loads(last_content)
